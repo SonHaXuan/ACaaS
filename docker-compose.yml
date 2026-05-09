@@ -1,0 +1,178 @@
+version: "3.9"
+
+# ACaaS — Privacy-Preserving Access Control as a Service
+# Cloud-Edge Continuum Healthcare Platform
+#
+# Service ports:
+#   8001 policy-manager | 8002 cloud-pdp | 8003 edge-pdp
+#   8004 data-minimizer | 8005 pep       | 8006 sync-server
+#   8007 fog-cache      | 8008 fog-aggregation
+#   9090 prometheus     | 3000 grafana
+
+x-python-base: &python-base
+  build:
+    context: .
+    dockerfile: Dockerfile.python
+  environment:
+    PYTHONPATH: /app
+  restart: unless-stopped
+
+services:
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  policy-manager:
+    <<: *python-base
+    command: python cloud/policy-manager/main.py
+    ports: ["8001:8001"]
+    environment:
+      PMS_PORT: 8001
+      PMS_DB_PATH: /data/pms.db
+      ACAAS_LEDGER_BACKEND: redis
+      ACAAS_REDIS_URL: redis://redis:6379/0
+      PYTHONPATH: /app
+    volumes: [pms-data:/data]
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  cloud-pdp:
+    <<: *python-base
+    command: python cloud/cloud-pdp/main.py
+    ports: ["8002:8002"]
+    environment:
+      CLOUD_PDP_PORT: 8002
+      PMS_DB_PATH: /data/pms.db
+      ACAAS_LEDGER_BACKEND: redis
+      ACAAS_REDIS_URL: redis://redis:6379/0
+      PYTHONPATH: /app
+    volumes: [pms-data:/data]
+    depends_on:
+      policy-manager:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  sync-server:
+    <<: *python-base
+    command: python sync/server/sync_server.py
+    ports: ["8006:8006"]
+    environment:
+      SYNC_SERVER_PORT: 8006
+      ACAAS_LEDGER_BACKEND: redis
+      ACAAS_REDIS_URL: redis://redis:6379/0
+      PYTHONPATH: /app
+    depends_on:
+      policy-manager:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  fog-cache:
+    <<: *python-base
+    command: python fog/policy-cache/main.py
+    ports: ["8007:8007"]
+    environment:
+      FOG_CACHE_PORT: 8007
+      PMS_URL: http://policy-manager:8001
+      ACAAS_LEDGER_BACKEND: redis
+      ACAAS_REDIS_URL: redis://redis:6379/0
+      PYTHONPATH: /app
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  fog-aggregation:
+    <<: *python-base
+    command: python fog/aggregation/main.py
+    ports: ["8008:8008"]
+    environment:
+      FOG_AGG_PORT: 8008
+      ACAAS_LEDGER_BACKEND: redis
+      ACAAS_REDIS_URL: redis://redis:6379/0
+      PYTHONPATH: /app
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  edge-pdp:
+    <<: *python-base
+    command: python edge/lightweight-pdp/main.py
+    ports: ["8003:8003"]
+    environment:
+      EDGE_PDP_PORT: 8003
+      EDGE_DB_PATH: /data/edge.db
+      CLOUD_PDP_URL: http://cloud-pdp:8002
+      PYTHONPATH: /app
+    volumes: [edge-data:/data]
+
+  data-minimizer:
+    <<: *python-base
+    command: python edge/data-minimizer/main.py
+    ports: ["8004:8004"]
+    environment:
+      DATA_MINIMIZER_PORT: 8004
+      PYTHONPATH: /app
+
+  pep:
+    <<: *python-base
+    command: python edge/pep/main.py
+    ports: ["8005:8005"]
+    environment:
+      PEP_PORT: 8005
+      EDGE_PDP_URL: http://edge-pdp:8003
+      DATA_MINIMIZER_URL: http://data-minimizer:8004
+      QUEUE_DB_PATH: /data/queue.db
+      PYTHONPATH: /app
+    volumes: [edge-data:/data]
+    depends_on: [edge-pdp, data-minimizer]
+
+  edge-sync-client:
+    <<: *python-base
+    command: python sync/client/sync_client.py
+    environment:
+      EDGE_NODE_ID: edge-node-1
+      SYNC_SERVER_URL: http://sync-server:8006
+      PMS_URL: http://policy-manager:8001
+      HEARTBEAT_SEC: 1
+      EDGE_DB_PATH: /data/edge.db
+      QUEUE_DB_PATH: /data/queue.db
+      ACAAS_LEDGER_BACKEND: redis
+      ACAAS_REDIS_URL: redis://redis:6379/0
+      PYTHONPATH: /app
+    volumes: [edge-data:/data]
+    depends_on:
+      sync-server:
+        condition: service_started
+      redis:
+        condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    ports: ["9090:9090"]
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    ports: ["3000:3000"]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: acaas
+    volumes: [grafana-data:/var/lib/grafana]
+    depends_on: [prometheus]
+
+volumes:
+  pms-data:
+  edge-data:
+  grafana-data:
