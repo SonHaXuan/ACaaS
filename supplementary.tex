@@ -35,13 +35,14 @@
 
 \title{Supplementary Material for ``ACaaS: Privacy-Preserving Access Control as a Service for Healthcare on the Cloud--Edge Continuum''}
 \titlerunning{ACaaS --- Supplementary Material}
-\author{Anonymous Author(s)}
-\authorrunning{Anonymous Author(s)}
-\institute{Submission to ICSOC 2026 --- double-blind review}
+% \author{Anonymous Author(s)}
+% \authorrunning{Anonymous Author(s)}
+% \institute{Submission to ICSOC 2026 --- double-blind review}
+\input{author_info}
 \maketitle
 
 \begin{abstract}
-This supplement provides material referenced from the main paper: a point-by-point summary of the changes with respect to the ICSOC 2026 early submission (Sect.~\ref{s:changes}); expanded proofs of Lemma~1, Theorems~1--5, Corollary~1, and Proposition~1 (Sect.~\ref{s:proofs}); the step-numbered policy-synchronization diagram (Sect.~\ref{s:sync}); the Data Minimizer pipeline diagram (Sect.~\ref{s:minfig}); distribution plots for experiments E1/E4/E5 and companion plots for E8/E11/E12 (Sect.~\ref{s:plots}); the per-site E12 soak table and the real-Fabric transcript summary (Sect.~\ref{s:tables}); and reproduction instructions (Sect.~\ref{s:repro}). Reviewers are not required to consult this material; all claims of the main paper are supported there.
+This supplement provides material referenced from the main paper: a point-by-point summary of the changes with respect to the ICSOC 2026 early submission (Sect.~\ref{s:changes}); detailed experimental setup covering hardware specifications, synthetic workload generation, network emulation parameters, baseline configurations, and per-experiment parameters for all twelve experiments E1--E12 (Sect.~\ref{s:setup}); expanded proofs of Lemma~1, Theorems~1--5, Corollary~1, and Proposition~1 (Sect.~\ref{s:proofs}); the step-numbered policy-synchronization diagram (Sect.~\ref{s:sync}); the Data Minimizer pipeline diagram (Sect.~\ref{s:minfig}); distribution plots for experiments E1/E4/E5 and companion plots for E8/E11/E12 (Sect.~\ref{s:plots}); the per-site E12 soak table and the real-Fabric transcript summary (Sect.~\ref{s:tables}); and reproduction instructions (Sect.~\ref{s:repro}). Reviewers are not required to consult this material; all claims of the main paper are supported there.
 \end{abstract}
 
 \section{Changes with Respect to the ICSOC 2026 Early Submission (Paper 81)}
@@ -75,6 +76,76 @@ All experiments are consolidated into Table~2 plus two multi-panel figures with 
 
 \smallskip\noindent\textbf{Reviewer 3 --- novelty is combination of known techniques; claims lack (semi-)formal backing.}
 We no longer claim novelty in any individual primitive. The contribution is the \emph{composition} and its provable properties: substitution-resistant synchronization (Lemma~1) that demonstrably disappears under component replacement (E10), eventual consistency with a closed-form reconciliation bound (Theorem~1, Corollary~1), knapsack-near-optimal tier placement (Proposition~1) validated at $R^2{=}0.998$ (E7), and an enforced no-raw-egress invariant (Theorem~3) calibrated by an actual attack (E9). Every formal statement now has an executable counterpart; machine-checked proofs remain future work and are stated as such.
+
+\section{Detailed Experimental Setup and Workloads}
+\label{s:setup}
+
+This section provides the comprehensive evaluation methodology requested by reviewers, covering hardware specifications, workload generation, network emulation parameters, baseline configurations, and per-experiment settings for all twelve experiments (E1--E12).
+
+\subsection*{Testbed Hardware}
+
+\noindent\textbf{Cloud tier.} A high-performance local server simulating a cloud instance, running Ubuntu 22.04 LTS with an Intel Core i7-12700 CPU (12 cores, 2.1\,GHz base), 32\,GB DDR5 RAM, and a 1\,TB NVMe SSD. This host runs: the Policy Manager Service (PAP), the full OPA-based cloud PDP, the API Gateway (Nginx with OIDC middleware), the Audit \& Compliance service, and a four-peer Hyperledger Fabric network (two organizations, Raft ordering, $f{=}1$ fault tolerance). All Fabric peers are co-located on the same physical host via Docker, so inter-peer network overhead is minimal (loopback); the Real-Fabric transcript in Sect.~\ref{s:tables} provides a sanity check of the latency constants on a geographically distributed Fabric test network.
+
+\noindent\textbf{Fog tier.} A mid-range desktop running Ubuntu 22.04 LTS with an Intel Core i5-10400 CPU (6 cores, 2.9\,GHz), 16\,GB DDR4 RAM. This host runs the Policy Cache (TTL-based invalidation, version-keyed) and the Log Aggregation service.
+
+\noindent\textbf{Edge tier.} A Raspberry Pi 4 Model B (ARM Cortex-A72, 4\,GB RAM) running Raspberry Pi OS 64-bit (Debian 11 base), representing a rural clinic gateway or ambulance mobile unit. This host runs the lightweight OPA-WASM PDP, the Local Policy Store, the Data Minimizer, and the Offline Queue (disk-backed, monotone-sequenced).
+
+All three hosts reside on the same physical LAN; WAN latency and partitions are \emph{emulated} via Linux \texttt{tc-netem} on the network interface connecting the cloud and fog/edge hosts, as described below.
+
+\subsection*{Network Emulation}
+
+\noindent\textbf{WAN conditions (E1, E5, E12).} A fixed 50\,ms round-trip latency is imposed between cloud and edge using \texttt{tc-netem add delay 25ms} on both ends, approximating a rural hospital-to-datacenter WAN link. Bandwidth is capped at 10\,Mbit/s, matching common rural broadband constraints.
+
+\noindent\textbf{Partition injection (E5, E12).} WAN partitions are emulated by applying \texttt{tc-netem loss 100\%} on the cloud-facing interface of the edge host for a programmatically controlled duration. The edge enters and exits \textsc{offline} mode autonomously based on heartbeat failure/recovery detection (3-second timeout). For E12, partitions are injected at random intervals drawn from $U[2, 8]$~minutes per site profile.
+
+\subsection*{Synthetic EHR Workload Generation}
+
+No real patient data was used. Synthetic EHR records were generated procedurally using a schema derived from the HL7 FHIR R4 Patient and Observation resources:
+
+\begin{itemize}[leftmargin=*, itemsep=1pt]
+  \item \textbf{Date of birth}: uniformly sampled, ages 19--74.
+  \item \textbf{Postal code}: 200 synthetic codes with Zipf-distributed frequency (emulating urban hot spots).
+  \item \textbf{Gender}: binary, 50/50. \textbf{Ethnicity}: four categories, uniform.
+  \item \textbf{Sensitive attribute}: ICD-10 diagnosis code, lab result flag, or medication class (uniform).
+  \item \textbf{Record sizes}: small $\approx$512\,B (vitals only), medium $\approx$2\,KB (full admission), large $\approx$8\,KB (imaging metadata).
+\end{itemize}
+
+\subsection*{Policy Corpus}
+
+200 synthetic ABAC rules cover the most common clinical access patterns: role-based EHR read, break-glass emergency access, research de-identification, audit-log write, and formulary check. Policies are compiled from YAML source to OPA Rego bundles; compiled sizes range from 1.8\,KB to 6.9\,KB (mean 3.4\,KB, factor $<$4$\times$ spread, consistent with Proposition~1). Each policy is signed with ECDSA-P256; the signature is included in the committed ledger tuple.
+
+\subsection*{Per-Experiment Parameters}
+
+\noindent\textbf{E1 (Latency, G4).} 1\,000 sequential requests from a single client; 50\,ms WAN active; policies pre-loaded. Metric: median and IQR of end-to-end decision latency.
+
+\noindent\textbf{E2 (Throughput, G4/G2).} Concurrent load swept across six levels (50, 100, 200, 500, and 1\,000 workers; Python \texttt{ThreadPoolExecutor}), each worker issuing 20 requests (up to 20\,000 total). Metric: sustained throughput (req/s), P95 response time, zero-failure threshold enforced.
+
+\noindent\textbf{E3 (Sync consistency, G1/Corollary~1).} Policy-batch commit to PolicyChain; synchronization latency measured to last-edge ACK. Batch sizes: 1, 5, 10, 25, 50, 100, and 200 policies (seven levels); 10 repetitions each. Metric: median $\pm$ IQR per batch size.
+
+\noindent\textbf{E4 (Ledger overhead, G2/G5).} \emph{Baseline}: direct PostgreSQL write (tamper-evident audit log, no blockchain). \emph{ACaaS}: Hyperledger Fabric endorsement via the same gRPC client. 200 operations per configuration. Metric: per-operation latency boxplot. The Fabric overhead quantifies the cost of the tamper-evidence guarantee that the direct-DB baseline cannot provide.
+
+\noindent\textbf{E5 (Offline resilience, G4).} WAN severed for 60\,s; edge serves 1\,000 requests from cache. Connectivity restored; Offline Queue drained. Metric: online vs.\ offline latency distribution; zero drain failures.
+
+\noindent\textbf{E6 (Conformance suite).} Full 33-test pytest suite (20 unit tests + 5 blockchain mock tests + 8 cross-validation tests), no service mocking (Docker Compose stack). The 21 security assertions cover: eventual consistency (50-update offline burst, 10 trials); $\mathsf{INV}_{\mathrm{mono}}$ enforcement (5 rollback attempts rejected); F3 hash-mismatch rejection (20 injected tampered bodies); $\mathrm{seq}_e$ gap detection (5 dropped records); drain-without-loss (50 queued records); no-direct-identifier-egress (verified via \texttt{grep}-based import-level check that no module reachable from the edge PDP response path imports \texttt{requests}, \texttt{httpx}, or \texttt{urllib} + runtime trace); $k$-anonymity cohort check (50 batches); import-level no-WAN-coupling of edge PDP (confirmed: \texttt{edge/lightweight-pdp/} has no WAN-touching dependency); audit-replay reconstruction end-to-end. Pass threshold: 100\%.
+
+\noindent\textbf{E7 (Cache hit-rate, Proposition~1).} $\rho_{\mathrm{edge}}$ swept across nine evenly-spaced levels from $0.10$ to $1.00$ (step $0.15$) by controlling the pre-loaded policy fraction; 1\,000 samples per setting. Predicted latency uses measured constants $T_{\mathrm{edge}}=0.393$\,ms, $T_{\mathrm{WAN}}=50$\,ms, $T_{\mathrm{cloud}}=7.81$\,ms.
+
+\noindent\textbf{E8 (Minimizer cost, G3).} 1\,000 records per size class (small/medium/large) through all three pipeline stages; 10 warm-up runs discarded; timing via \texttt{perf\_\allowbreak counter\_\allowbreak ns}. $k$-anonymity scaling: 5\,000 records per cohort at $k \in \{5, 10, 20\}$.
+
+\noindent\textbf{E9 (Re-identification attack, Theorem~3).} Adversary: honest-but-curious clinician with exact quasi-identifier background knowledge. Cohort: 10\,000 synthetic records; 2\,000 attack trials per $(k, R)$; $k \in \{5, 10, 20\}$ and $R = 1, \ldots, 10$ independent releases from disjoint cohorts. Baseline: $1/k$ single-release bound and cumulative $1-(1-1/k)^R$.
+
+\noindent\textbf{E10 (Substrate ablation, Lemma~1).} Config A: ACaaS ledger (PolicyChain hash-anchor). Config B: Redis 7 Pub/Sub baseline (no body-to-hash anchoring; Redis 7-alpine running as a Docker container on the cloud host, co-located with the Fabric peers). Subscriber count swept across five levels: 1, 5, 10, 25, and 50. Tamper: policy body replaced en route while ledger entry unchanged. Metric: propagation latency and tamper-detection rate (expected: 100\% ledger, 0\% pub/sub).
+
+\noindent\textbf{E11 (Byzantine fault, $f{=}1$).} Four-peer ensemble, \texttt{AND(Org1,Org2)} threshold. One peer runs: (a)~passive, (b)~rewind (signs outdated version), (c)~fork (signs different body). 50 commit attempts per scenario (200 total). Metrics: liveness rate and $\mathsf{INV}_{\mathrm{mono}}$ violation count.
+
+\noindent\textbf{E12 (Three-site soak, G1/G2/G4).} 720 simulated minutes ($6\times$ time compression, achieved by scaling all sleep and timer intervals by $1/6$ in the emulation harness, so the test completes in $\approx120$ real minutes); three site profiles:
+\begin{itemize}[leftmargin=*, itemsep=1pt]
+  \item \emph{Urban hospital ward gateway}: 18 req/min, 4 partitions (mean 5\,min each).
+  \item \emph{District clinic}: 12 req/min, 12 partitions (mean 8\,min each).
+  \item \emph{Mobile unit}: 8 req/min, 21 partitions (mean 12\,min each).
+\end{itemize}
+Workload rates represent the authorization traffic routed through a \emph{single edge gateway} serving one department or vehicle; aggregate hospital-wide traffic is covered by the throughput sweep in E2.
+29 policy updates at random intervals (seed 20260704). Metrics: per-site availability, offline/stale decision counts, LogChain entry count vs.\ zero-loss threshold, peak Offline Queue backlog, maximum missed updates before Phase~C reconciliation. Results in Table~\ref{tab:s-soak}.
 
 \section{Expanded Proofs}
 \label{s:proofs}
@@ -328,7 +399,7 @@ Let items be policies $p$ with weight $|p|$ and value $s(p)=f(p)\Delta$, budget 
       ymin=10, ymax=78, boxplot/draw direction=y,
       boxplot={draw position=\plotnum+1, box extend=0.3}]
     \addplot[boxplot prepared={median=23, upper quartile=31, lower quartile=20, upper whisker=70, lower whisker=15}, fill=green!45, draw=black] coordinates {};
-    \addplot[boxplot prepared={median=23, upper quartile=40, lower quartile=20, upper whisker=70, lower whisker=16}, fill=red!35, draw=black] coordinates {};
+    \addplot[boxplot prepared={median=26, upper quartile=43, lower quartile=22, upper whisker=73, lower whisker=17}, fill=red!35, draw=black] coordinates {};
     \end{axis}
     \end{tikzpicture}
     \caption{E4: ledger overhead}
@@ -345,8 +416,8 @@ Let items be policies $p$ with weight $|p|$ and value $s(p)=f(p)\Delta$, budget 
     \end{tikzpicture}
     \caption{E5: edge autonomy}
     \end{subfigure}
-    \caption{The Data Minimizer pipeline at the edge. Stage~1 pseudonymizes direct identifiers with HMAC-SHA256; Stage~2 generalizes quasi-identifiers to enforce $k$-anonymity; Stage~3 redacts fields outside the requester role's visible set. Each stage is configured by obligations attached to the PDP response.}
-  \label{fig:s-min}
+    \caption{Distribution plots for E1, E4, and E5. (a)~E1: median authorization latency for cloud PDP ($57.81$~ms, 50~ms WAN emulated) vs.\ edge PDP ($6.89$~ms); (b)~E4: evaluation latency boxplots for direct database write (median $23$~ms) vs.\ Hyperledger Fabric anchoring (median $26$~ms, overhead $+3$~ms); (c)~E5: edge PDP latency distribution under online and offline (WAN-severed) conditions, showing $100\%$ local availability with comparable latency.}
+  \label{fig:s-e145}
 \end{figure}
 
 \begin{figure}[htbp]
@@ -419,7 +490,7 @@ Let items be policies $p$ with weight $|p|$ and value $s(p)=f(p)\Delta$, budget 
 \toprule
 \textbf{Site} & \textbf{Requests} & \textbf{Avail.} & \shortstack[r]{\textbf{Offline}\\\textbf{dec.}} & \shortstack[r]{\textbf{Stale}\\\textbf{dec.}} & \textbf{Partitions} & \shortstack[r]{\textbf{Max}\\\textbf{backlog}} & \shortstack[r]{\textbf{Max}\\\textbf{missed}} \\
 \midrule
-Urban hospital  & 12{,}960 & 100\% & 270   & 36  & 4  & 90  & 1 \\
+Urban ward gwy. & 12{,}960 & 100\% & 270   & 36  & 4  & 90  & 1 \\
 District clinic & 8{,}640  & 100\% & 1{,}740 & 828 & 12 & 240 & 2 \\
 Mobile unit     & 5{,}760  & 100\% & 1{,}464 & 400 & 21 & 128 & 2 \\
 \midrule
@@ -436,7 +507,7 @@ The official Hyperledger Fabric test network (two organizations, Raft ordering) 
 \section{Reproduction Instructions}
 \label{s:repro}
 
-The artefact is available at \url{https://anonymous.4open.science/r/ACaaS-69E1/} and was last executed with Python~3.12.3.
+The artefact is available at \url{https://github.com/SonHaXuan/ACaaS} and was last executed with Python~3.12.3.
 
 \begin{itemize}[leftmargin=*]
   \item \texttt{pytest -q} --- runs the full test suite (54 tests, including the 21-assertion G1--G5 conformance suite under \texttt{tests/security/}); completes in seconds.
