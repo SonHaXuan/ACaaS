@@ -42,8 +42,6 @@ def _build_policy(req: CreatePolicyRequest) -> Policy:
         rule=rule,
         criticality=req.criticality,
     )
-    policy.seal()
-    adaptive.update_deployment_tier(policy)
     return policy
 
 
@@ -66,9 +64,34 @@ def create_policy(req: CreatePolicyRequest):
     if db.get_policy(req.policy_id):
         raise HTTPException(409, "Policy already exists")
     policy = _build_policy(req)
+    cur_v, _ = fabric.get_policy_version(policy.policy_id)
+    policy.version = cur_v + 1
+    policy.seal()
+    adaptive.update_deployment_tier(policy)
     db.upsert_policy(policy)
-    fabric.commit_policy(policy.policy_id, policy.hash, policy_body=asdict(policy.rule))
+    fabric.commit_policy(policy.policy_id, policy.hash, policy_body=asdict(policy.rule), expected_prev_version=cur_v)
     return _to_response(policy)
+
+
+@router.post("/batch", response_model=list[PolicyResponse],
+             status_code=status.HTTP_201_CREATED)
+def create_policies_batch(reqs: list[CreatePolicyRequest]):
+    created = []
+    for req in reqs:
+        policy = _build_policy(req)
+        existing = db.get_policy(req.policy_id)
+        if existing:
+            prev_v = existing.version
+            policy.version = prev_v + 1
+        else:
+            prev_v, _ = fabric.get_policy_version(policy.policy_id)
+            policy.version = prev_v + 1
+        policy.seal()
+        adaptive.update_deployment_tier(policy)
+        db.upsert_policy(policy)
+        fabric.commit_policy(policy.policy_id, policy.hash, policy_body=asdict(policy.rule), expected_prev_version=prev_v)
+        created.append(_to_response(policy))
+    return created
 
 
 @router.get("/", response_model=list[PolicyResponse])
@@ -104,13 +127,15 @@ def update_policy(policy_id: str, req: UpdatePolicyRequest):
     if req.criticality is not None:
         existing.criticality = req.criticality
 
+    prev_version = existing.version
     existing.version += 1
     existing.updated_at = time.time()
     existing.seal()
     adaptive.update_deployment_tier(existing)
     db.upsert_policy(existing)
-    fabric.commit_policy(existing.policy_id, existing.hash, policy_body=asdict(existing.rule))
+    fabric.commit_policy(existing.policy_id, existing.hash, policy_body=asdict(existing.rule), expected_prev_version=prev_version)
     return _to_response(existing)
+
 
 
 @router.delete("/{policy_id}", status_code=status.HTTP_204_NO_CONTENT)

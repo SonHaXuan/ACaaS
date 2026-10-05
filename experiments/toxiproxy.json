@@ -1,0 +1,20 @@
+[
+  {
+    "name": "pms",
+    "listen": "0.0.0.0:18001",
+    "upstream": "policy-manager:8001",
+    "enabled": true
+  },
+  {
+    "name": "cloud-pdp",
+    "listen": "0.0.0.0:18002",
+    "upstream": "cloud-pdp:8002",
+    "enabled": true
+  },
+  {
+    "name": "sync-server",
+    "listen": "0.0.0.0:18006",
+    "upstream": "sync-server:8006",
+    "enabled": true
+  }
+]

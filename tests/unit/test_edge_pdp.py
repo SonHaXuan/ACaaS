@@ -3,8 +3,8 @@ Unit tests for the Edge Lightweight PDP evaluator.
 Tests deny-overrides, time-range conditions, and role matching.
 """
 import sys, os, json
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../edge/local-policy-store"))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../edge/lightweight-pdp"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../edge/local-policy-store"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../edge/lightweight-pdp"))
 
 import store, evaluator
 
@@ -28,6 +28,7 @@ DENY_RULE = json.dumps({
 
 
 def setup_function():
+    store.close()
     os.environ["EDGE_DB_PATH"] = "/tmp/acaas_test_edge.db"
     store.DB_PATH = "/tmp/acaas_test_edge.db"
     # reset
@@ -36,6 +37,10 @@ def setup_function():
         c.execute("DROP TABLE IF EXISTS policies")
         c.execute("DROP TABLE IF EXISTS sync_state")
     store.init()
+
+
+def teardown_function():
+    store.close()
 
 
 def test_permit_for_matching_role():

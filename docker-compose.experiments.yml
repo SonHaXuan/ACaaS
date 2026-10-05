@@ -1,0 +1,166 @@
+# ACaaS Experiment Infrastructure Overlay (P1.2)
+# Splits network into cloud-net and edge-net with Toxiproxy as the WAN bridge.
+# Adds PostgreSQL baseline for E4 and multi-edge profiles for E12 soak test.
+
+networks:
+  cloud-net:
+    driver: bridge
+  edge-net:
+    driver: bridge
+
+services:
+
+  # ── WAN Emulator (Toxiproxy) ──────────────────────────────────────────
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.9.0
+    command: -host=0.0.0.0 -config=/etc/toxiproxy.json
+    volumes:
+      - ./experiments/toxiproxy.json:/etc/toxiproxy.json:ro
+    ports:
+      - "8474:8474"   # Toxiproxy HTTP API
+      - "18001:18001" # Proxied Policy Manager
+      - "18002:18002" # Proxied Cloud PDP
+      - "18006:18006" # Proxied Sync Server
+    networks:
+      - cloud-net
+      - edge-net
+    restart: unless-stopped
+
+  # ── Cloud Network Services ───────────────────────────────────────────
+  redis:
+    networks:
+      - cloud-net
+
+  policy-manager:
+    networks:
+      - cloud-net
+
+  cloud-pdp:
+    networks:
+      - cloud-net
+
+  sync-server:
+    networks:
+      - cloud-net
+
+  fog-cache:
+    networks:
+      - cloud-net
+
+  fog-aggregation:
+    networks:
+      - cloud-net
+
+  # ── Fabric Gateway Sidecar (4-Peer Ensemble) ─────────────────────────
+  fabric-sidecar:
+    build:
+      context: .
+      dockerfile: blockchain/fabric/Dockerfile.sidecar
+    ports:
+      - "7050:7050"
+    networks:
+      - cloud-net
+    environment:
+      PORT: 7050
+    restart: unless-stopped
+
+  # ── Edge Network Services (Edge Site 1: Urban Hospital Ward) ─────────
+  edge-pdp:
+    networks:
+      - edge-net
+
+  data-minimizer:
+    networks:
+      - edge-net
+
+  pep:
+    networks:
+      - edge-net
+    environment:
+      CLOUD_PDP_URL: http://toxiproxy:18002
+    depends_on:
+      - toxiproxy
+
+  edge-sync-client:
+    networks:
+      - edge-net
+    environment:
+      EDGE_NODE_ID: edge-node-1
+      SYNC_SERVER_URL: http://toxiproxy:18006
+      PMS_URL: http://toxiproxy:18001
+      HEARTBEAT_SEC: 1
+      ACAAS_TIME_SCALE: 1.0
+      ACAAS_LEDGER_BACKEND: memory
+    depends_on:
+      - toxiproxy
+
+  # ── Edge Site 2 (District Clinic — E12 profile) ──────────────────────
+  edge-sync-client-2:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    command: python sync/client/sync_client.py
+    environment:
+      EDGE_NODE_ID: edge-node-2
+      SYNC_SERVER_URL: http://toxiproxy:18006
+      PMS_URL: http://toxiproxy:18001
+      HEARTBEAT_SEC: 1
+      EDGE_DB_PATH: /data/edge2.db
+      QUEUE_DB_PATH: /data/queue2.db
+      ACAAS_LEDGER_BACKEND: redis
+      ACAAS_REDIS_URL: redis://redis:6379/0
+      PYTHONPATH: /app
+      ACAAS_TIME_SCALE: 1.0
+    volumes: [edge-data:/data]
+    networks:
+      - edge-net
+    depends_on:
+      - toxiproxy
+    profiles: ["multi-edge", "e12"]
+
+  # ── Edge Site 3 (Mobile Unit — E12 profile) ──────────────────────────
+  edge-sync-client-3:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    command: python sync/client/sync_client.py
+    environment:
+      EDGE_NODE_ID: edge-node-3
+      SYNC_SERVER_URL: http://toxiproxy:18006
+      PMS_URL: http://toxiproxy:18001
+      HEARTBEAT_SEC: 1
+      EDGE_DB_PATH: /data/edge3.db
+      QUEUE_DB_PATH: /data/queue3.db
+      ACAAS_LEDGER_BACKEND: redis
+      ACAAS_REDIS_URL: redis://redis:6379/0
+      PYTHONPATH: /app
+      ACAAS_TIME_SCALE: 1.0
+    volumes: [edge-data:/data]
+    networks:
+      - edge-net
+    depends_on:
+      - toxiproxy
+    profiles: ["multi-edge", "e12"]
+
+  # ── Direct DB Baseline (E4 PostgreSQL Audit Trail) ───────────────────
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: acaas_audit
+      POSTGRES_USER: acaas
+      POSTGRES_PASSWORD: acaas_secret
+    ports:
+      - "5432:5432"
+    networks:
+      - cloud-net
+    profiles: ["e4", "baseline"]
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U acaas -d acaas_audit"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pg-data:

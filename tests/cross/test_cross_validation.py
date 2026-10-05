@@ -14,7 +14,7 @@ from __future__ import annotations
 import sys, os, json, hashlib, importlib.util
 
 from pathlib import Path
-ROOT = str(Path(__file__).resolve().parents[1])
+ROOT = str(Path(__file__).resolve().parents[2])
 sys.path.insert(0, ROOT)
 
 os.chdir(ROOT)

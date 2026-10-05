@@ -1,5 +1,3 @@
-version: "3.9"
-
 # ACaaS — Privacy-Preserving Access Control as a Service
 # Cloud-Edge Continuum Healthcare Platform
 #
@@ -63,6 +61,11 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   sync-server:
     <<: *python-base
@@ -113,9 +116,13 @@ services:
     environment:
       EDGE_PDP_PORT: 8003
       EDGE_DB_PATH: /data/edge.db
-      CLOUD_PDP_URL: http://cloud-pdp:8002
       PYTHONPATH: /app
     volumes: [edge-data:/data]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8003/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   data-minimizer:
     <<: *python-base
@@ -124,6 +131,11 @@ services:
     environment:
       DATA_MINIMIZER_PORT: 8004
       PYTHONPATH: /app
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8004/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   pep:
     <<: *python-base
@@ -133,10 +145,22 @@ services:
       PEP_PORT: 8005
       EDGE_PDP_URL: http://edge-pdp:8003
       DATA_MINIMIZER_URL: http://data-minimizer:8004
+      CLOUD_PDP_URL: http://cloud-pdp:8002
       QUEUE_DB_PATH: /data/queue.db
       PYTHONPATH: /app
     volumes: [edge-data:/data]
-    depends_on: [edge-pdp, data-minimizer]
+    depends_on:
+      edge-pdp:
+        condition: service_healthy
+      data-minimizer:
+        condition: service_healthy
+      cloud-pdp:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8005/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   edge-sync-client:
     <<: *python-base

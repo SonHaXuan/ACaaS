@@ -60,6 +60,7 @@ def health():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0",
-                port=int(os.environ.get("DATA_MINIMIZER_PORT", 8004)),
-                reload=True)
+    port = int(os.environ.get("DATA_MINIMIZER_PORT", 8004))
+    log_level = os.environ.get("UVICORN_LOG_LEVEL", "warning")
+    uvicorn.run(app, host="0.0.0.0", port=port, log_level=log_level)
+

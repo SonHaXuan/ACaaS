@@ -1,0 +1,48 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'policy-manager'
+    static_configs:
+      - targets: ['policy-manager:8001']
+    metrics_path: '/metrics'
+
+  - job_name: 'cloud-pdp'
+    static_configs:
+      - targets: ['cloud-pdp:8002']
+    metrics_path: '/metrics'
+
+  - job_name: 'edge-pdp'
+    static_configs:
+      - targets: ['edge-pdp:8003']
+    metrics_path: '/metrics'
+
+  - job_name: 'data-minimizer'
+    static_configs:
+      - targets: ['data-minimizer:8004']
+    metrics_path: '/metrics'
+
+  - job_name: 'pep'
+    static_configs:
+      - targets: ['pep:8005']
+    metrics_path: '/metrics'
+
+  - job_name: 'sync-server'
+    static_configs:
+      - targets: ['sync-server:8006']
+    metrics_path: '/metrics'
+
+  - job_name: 'fog-cache'
+    static_configs:
+      - targets: ['fog-cache:8007']
+    metrics_path: '/metrics'
+
+  - job_name: 'fog-aggregation'
+    static_configs:
+      - targets: ['fog-aggregation:8008']
+    metrics_path: '/metrics'

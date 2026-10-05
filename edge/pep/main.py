@@ -9,15 +9,27 @@ from __future__ import annotations
 import importlib.util
 import sys, os, time, uuid, json
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../"))
+sys.path.insert(0, os.path.dirname(__file__))
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 import urllib.request
+from cloud_escalation import escalate_to_cloud
 
 EDGE_PDP_URL    = os.environ.get("EDGE_PDP_URL", "http://localhost:8003")
 DATA_MIN_URL    = os.environ.get("DATA_MINIMIZER_URL", "http://localhost:8004")
-OFFLINE_QUEUE_PATH = os.path.join(os.path.dirname(__file__), "../offline-queue/offline_queue.py")
+CLOUD_PDP_URL   = os.environ.get("CLOUD_PDP_URL", "http://localhost:8002")
+OFFLINE_QUEUE_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), "../offline-queue"))
+if OFFLINE_QUEUE_DIR not in sys.path:
+    sys.path.insert(0, OFFLINE_QUEUE_DIR)
+
+try:
+    import offline_queue
+except ImportError:
+    offline_queue = None
+
+OFFLINE_QUEUE_PATH = os.path.join(OFFLINE_QUEUE_DIR, "offline_queue.py")
 
 app = FastAPI(title="ACaaS Policy Enforcement Point", version="1.0.0")
 
@@ -32,6 +44,10 @@ class AccessRequest(BaseModel):
     action: str
     location: Optional[str] = None
     ehr_record: Optional[dict] = None   # raw EHR data (only for read requests)
+
+
+AccessRequest.model_rebuild()
+
 
 
 def _post(url: str, payload: dict, timeout: int = 5) -> dict | None:
@@ -50,12 +66,14 @@ def _post(url: str, payload: dict, timeout: int = 5) -> dict | None:
 def _enqueue_log(entry: dict) -> None:
     """Persist to offline queue (fire-and-forget)."""
     try:
-        spec = importlib.util.spec_from_file_location("acaas_offline_queue", OFFLINE_QUEUE_PATH)
-        if spec is None or spec.loader is None:
-            return
-        offline_q = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(offline_q)
-        offline_q.enqueue(entry)
+        if offline_queue is not None:
+            offline_queue.enqueue(entry)
+        else:
+            spec = importlib.util.spec_from_file_location("acaas_offline_queue", OFFLINE_QUEUE_PATH)
+            if spec and spec.loader:
+                mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)
+                mod.enqueue(entry)
     except Exception:
         pass
 
@@ -84,12 +102,28 @@ def enforce(req: AccessRequest):
         decision = "DENY"
         reason = "PDP unreachable — fail-safe deny"
         policy_id = None
+        policy_version = 0
+        policy_hash = ""
         latency_ms = (time.time() - t0) * 1000
     else:
         decision   = pdp_result.get("decision", "DENY")
         reason     = pdp_result.get("reason", "")
         policy_id  = pdp_result.get("policy_id")
+        policy_version = pdp_result.get("policy_version", 0)
+        policy_hash = pdp_result.get("policy_hash", "")
         latency_ms = pdp_result.get("latency_ms", 0)
+        cache_hit  = pdp_result.get("cache_hit", policy_id is not None)
+
+        # If cache miss (decision DENY and no matching policy at edge), escalate to Cloud PDP
+        if decision == "DENY" and not cache_hit:
+            cloud_res = escalate_to_cloud(pdp_payload, CLOUD_PDP_URL)
+            if cloud_res:
+                decision = cloud_res.get("decision", "DENY")
+                reason = cloud_res.get("reason", reason)
+                policy_id = cloud_res.get("policy_id")
+                policy_version = cloud_res.get("policy_version", 0)
+                policy_hash = cloud_res.get("policy_hash", "")
+                latency_ms = (time.time() - t0) * 1000
 
     # Step 2: if PERMIT + record provided → run Data Minimizer
     minimized_record = None
@@ -105,12 +139,19 @@ def enforce(req: AccessRequest):
     # Step 3: queue access log for LogChain
     log_entry = {
         "request_id": request_id,
+        "edge_id": os.environ.get("EDGE_NODE_ID", "edge-node-1"),
         "subject_id": req.subject_id,
+        "role": req.role,
+        "department": req.department,
+        "clearance_level": req.clearance_level,
         "patient_id": req.patient_id,
         "resource_type": req.resource_type,
         "action": req.action,
+        "location": req.location,
         "decision": decision,
         "policy_id": policy_id,
+        "policy_version": policy_version,
+        "policy_hash": policy_hash,
         "reason": reason,
         "latency_ms": round(latency_ms, 3),
         "evaluated_at": time.time(),
@@ -129,6 +170,8 @@ def enforce(req: AccessRequest):
         "decision": "PERMIT",
         "reason": reason,
         "policy_id": policy_id,
+        "policy_version": policy_version,
+        "policy_hash": policy_hash,
         "latency_ms": round(latency_ms, 3),
         "data": minimized_record,
     }
@@ -141,5 +184,7 @@ def health():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0",
-                port=int(os.environ.get("PEP_PORT", 8005)), reload=True)
+    port = int(os.environ.get("PEP_PORT", 8005))
+    log_level = os.environ.get("UVICORN_LOG_LEVEL", "warning")
+    uvicorn.run(app, host="0.0.0.0", port=port, log_level=log_level)
+

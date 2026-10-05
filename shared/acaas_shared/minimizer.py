@@ -61,6 +61,29 @@ def check_k_anonymity(records: list[dict[str, Any]],
     return min_size >= k, min_size
 
 
+def enforce_k_anonymity(
+    records: list[dict[str, Any]],
+    qi_fields: list[str] | None = None,
+    k: int = 10,
+) -> tuple[list[dict[str, Any]], int]:
+    """Enforces k-anonymity by grouping and suppressing outliers."""
+    from collections import defaultdict
+    fields = qi_fields or ["date_of_birth", "postal_code", "ethnicity", "gender"]
+    groups = defaultdict(list)
+    for rec in records:
+        qi_tuple = tuple(str(rec.get(f, "")) for f in fields)
+        groups[qi_tuple].append(rec)
+
+    sanitized: list[dict[str, Any]] = []
+    suppressed = 0
+    for qi_tuple, group in groups.items():
+        if len(group) >= k:
+            sanitized.extend(group)
+        else:
+            suppressed += len(group)
+    return sanitized, suppressed
+
+
 def minimize_record(record: dict[str, Any], access_level: int) -> dict[str, Any]:
     """
     Three-stage minimization pipeline (Section 4.3):

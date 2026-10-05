@@ -85,14 +85,21 @@ class FabricMock:
     # ── PolicyChain chaincode ─────────────────────────────────────────────
 
     def commit_policy(self, policy_id: str, policy_hash: str,
-                      issuer_sig: str = "", policy_body: dict | None = None) -> tuple[int, str]:
+                      issuer_sig: str = "", policy_body: dict | None = None,
+                      expected_prev_version: int | None = None) -> tuple[int, str]:
         """
-        Commit a policy update.  Returns (new_version, tx_id).
+        Commit a policy update. Returns (new_version, tx_id).
         Monotonically increments version per Section 3.2.
+        Enforces INV_mono if expected_prev_version is provided.
         """
         with self._version_lock:
-            new_v = self._versions[policy_id] + 1
-            prev_v = new_v - 1
+            current_v = self._versions[policy_id]
+            if expected_prev_version is not None and current_v != expected_prev_version:
+                raise ValueError(
+                    f"INV_mono violation: expected prev version {expected_prev_version}, got {current_v}"
+                )
+            new_v = current_v + 1
+            prev_v = current_v
             self._versions[policy_id] = new_v
 
         tx_id = self.policy_chain.commit({
@@ -117,6 +124,7 @@ class FabricMock:
             "global_seq": gseq,
         })
         return new_v, tx_id
+
 
     def delete_policy(self, policy_id: str) -> tuple[int, str]:
         with self._version_lock:
@@ -161,7 +169,20 @@ class FabricMock:
     # ── LogChain chaincode ────────────────────────────────────────────────
 
     def append_log(self, entry: dict) -> str:
-        return self.log_chain.commit(entry)
+        log_entry = dict(entry)
+        edge_id = log_entry.get("edge_id")
+        seq_e = log_entry.get("seq_e")
+        if edge_id and seq_e is not None:
+            if not hasattr(self, "_last_seq_e"):
+                self._last_seq_e = {}
+            with self._seq_lock:
+                expected_seq = self._last_seq_e.get(edge_id, 0) + 1
+                if seq_e != expected_seq:
+                    log_entry["gap_status"] = f"GAP_DETECTED{{edge:{edge_id}, expected:{expected_seq}, got:{seq_e}}}"
+                else:
+                    log_entry["gap_status"] = "OK"
+                self._last_seq_e[edge_id] = seq_e
+        return self.log_chain.commit(log_entry)
 
     def get_logs(self, subject_id: str | None = None,
                  patient_id: str | None = None) -> list[dict]:
@@ -184,6 +205,10 @@ class FabricMock:
         if to_version == 0:
             to_version = current_seq
         return self.sync_chain.query_range(from_version + 1, to_version)
+
+    def get_current_global_seq(self) -> int:
+        with self._seq_lock:
+            return self._global_seq
 
 
 class _RedisChannel:
@@ -251,9 +276,16 @@ class RedisFabric:
         return tx_id
 
     def commit_policy(self, policy_id: str, policy_hash: str,
-                      issuer_sig: str = "", policy_body: dict | None = None) -> tuple[int, str]:
+                      issuer_sig: str = "", policy_body: dict | None = None,
+                      expected_prev_version: int | None = None) -> tuple[int, str]:
         version_key = self._key("versions")
         hash_key = self._key("policy_hashes")
+        if expected_prev_version is not None:
+            current_v = int(self.redis.hget(version_key, policy_id) or 0)
+            if current_v != expected_prev_version:
+                raise ValueError(
+                    f"INV_mono violation: expected prev version {expected_prev_version}, got {current_v}"
+                )
         new_v = int(self.redis.hincrby(version_key, policy_id, 1))
         prev_v = new_v - 1
         self.redis.hset(hash_key, policy_id, policy_hash)
@@ -311,7 +343,18 @@ class RedisFabric:
         return current_version == version and current_hash == expected_hash
 
     def append_log(self, entry: dict) -> str:
-        return self._commit_channel("LogChain", entry)
+        log_entry = dict(entry)
+        edge_id = log_entry.get("edge_id")
+        seq_e = log_entry.get("seq_e")
+        if edge_id and seq_e is not None:
+            last_key = self._key("last_seq_e")
+            expected_seq = int(self.redis.hget(last_key, edge_id) or 0) + 1
+            if seq_e != expected_seq:
+                log_entry["gap_status"] = f"GAP_DETECTED{{edge:{edge_id}, expected:{expected_seq}, got:{seq_e}}}"
+            else:
+                log_entry["gap_status"] = "OK"
+            self.redis.hset(last_key, edge_id, seq_e)
+        return self._commit_channel("LogChain", log_entry)
 
     def get_logs(self, subject_id: str | None = None,
                  patient_id: str | None = None) -> list[dict]:
@@ -343,9 +386,21 @@ class RedisFabric:
             to_version = current_seq
         return self.sync_chain.query_range(from_version + 1, to_version)
 
+    def get_current_global_seq(self) -> int:
+        return int(self.redis.get(self._key("global_seq")) or 0)
 
-def _build_backend() -> FabricMock | RedisFabric:
+
+
+def _build_backend() -> Any:
     backend = os.environ.get("ACAAS_LEDGER_BACKEND", "").strip().lower()
+    fabric_url = os.environ.get("ACAAS_FABRIC_GATEWAY_URL", "").strip()
+    if backend in ("fabric", "fabric-gateway") or (not backend and bool(fabric_url)):
+        try:
+            from blockchain.fabric.client import FabricGatewayClient
+            return FabricGatewayClient(gateway_url=fabric_url or "http://localhost:7050")
+        except Exception:
+            pass
+
     redis_url = os.environ.get("ACAAS_REDIS_URL", "").strip()
     use_redis = backend == "redis" or (not backend and bool(redis_url))
     if use_redis:
@@ -360,3 +415,4 @@ def _build_backend() -> FabricMock | RedisFabric:
 
 
 fabric = _build_backend()
+

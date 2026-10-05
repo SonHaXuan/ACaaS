@@ -1,0 +1,237 @@
+# ACaaS Multi-Site Soak Test Overlay (P5 / E12)
+# Configures 3 distinct edge sites: site-urban, site-clinic, site-mobile
+# Each site has dedicated PEP, Edge PDP, Data Minimizer, Sync Client, and Proxy instances.
+
+services:
+
+  # ── Site 1: Urban Hospital Ward Gateway ─────────────────────────────────────
+  urban-proxy:
+    image: ghcr.io/shopify/toxiproxy:2.9.0
+    command: -host=0.0.0.0
+    networks: [edge-net, cloud-net]
+    profiles: ["soak"]
+
+  urban-edge-pdp:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    command: python edge/lightweight-pdp/main.py
+    ports: ["8103:8103"]
+    environment:
+      EDGE_PDP_PORT: 8103
+      EDGE_DB_PATH: /data/urban_edge.db
+      PYTHONPATH: /app
+    volumes: [edge-data:/data]
+    networks: [edge-net]
+    profiles: ["soak"]
+
+  urban-data-minimizer:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    command: python edge/data-minimizer/main.py
+    ports: ["8104:8104"]
+    environment:
+      DATA_MINIMIZER_PORT: 8104
+      PYTHONPATH: /app
+    networks: [edge-net]
+    profiles: ["soak"]
+
+  urban-pep:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    command: python edge/pep/main.py
+    ports: ["8105:8105"]
+    environment:
+      PEP_PORT: 8105
+      EDGE_PDP_URL: http://urban-edge-pdp:8103
+      DATA_MINIMIZER_URL: http://urban-data-minimizer:8104
+      CLOUD_PDP_URL: http://urban-proxy:18002
+      QUEUE_DB_PATH: /data/urban_queue.db
+      EDGE_NODE_ID: site-urban
+      PYTHONPATH: /app
+    volumes: [edge-data:/data]
+    networks: [edge-net]
+    depends_on:
+      - urban-edge-pdp
+      - urban-data-minimizer
+      - urban-proxy
+    profiles: ["soak"]
+
+  urban-sync-client:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    command: python sync/client/sync_client.py
+    environment:
+      EDGE_NODE_ID: site-urban
+      SYNC_SERVER_URL: http://urban-proxy:18006
+      PMS_URL: http://urban-proxy:18001
+      HEARTBEAT_SEC: 1
+      EDGE_DB_PATH: /data/urban_edge.db
+      QUEUE_DB_PATH: /data/urban_queue.db
+      ACAAS_LEDGER_BACKEND: redis
+      ACAAS_REDIS_URL: redis://redis:6379/0
+      PYTHONPATH: /app
+    volumes: [edge-data:/data]
+    networks: [edge-net]
+    depends_on:
+      - urban-proxy
+      - sync-server
+    profiles: ["soak"]
+
+  # ── Site 2: District Clinic ─────────────────────────────────────────────────
+  clinic-proxy:
+    image: ghcr.io/shopify/toxiproxy:2.9.0
+    command: -host=0.0.0.0
+    networks: [edge-net, cloud-net]
+    profiles: ["soak"]
+
+  clinic-edge-pdp:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    command: python edge/lightweight-pdp/main.py
+    ports: ["8203:8203"]
+    environment:
+      EDGE_PDP_PORT: 8203
+      EDGE_DB_PATH: /data/clinic_edge.db
+      PYTHONPATH: /app
+    volumes: [edge-data:/data]
+    networks: [edge-net]
+    profiles: ["soak"]
+
+  clinic-data-minimizer:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    command: python edge/data-minimizer/main.py
+    ports: ["8204:8204"]
+    environment:
+      DATA_MINIMIZER_PORT: 8204
+      PYTHONPATH: /app
+    networks: [edge-net]
+    profiles: ["soak"]
+
+  clinic-pep:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    command: python edge/pep/main.py
+    ports: ["8205:8205"]
+    environment:
+      PEP_PORT: 8205
+      EDGE_PDP_URL: http://clinic-edge-pdp:8203
+      DATA_MINIMIZER_URL: http://clinic-data-minimizer:8204
+      CLOUD_PDP_URL: http://clinic-proxy:18002
+      QUEUE_DB_PATH: /data/clinic_queue.db
+      EDGE_NODE_ID: site-clinic
+      PYTHONPATH: /app
+    volumes: [edge-data:/data]
+    networks: [edge-net]
+    depends_on:
+      - clinic-edge-pdp
+      - clinic-data-minimizer
+      - clinic-proxy
+    profiles: ["soak"]
+
+  clinic-sync-client:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    command: python sync/client/sync_client.py
+    environment:
+      EDGE_NODE_ID: site-clinic
+      SYNC_SERVER_URL: http://clinic-proxy:18006
+      PMS_URL: http://clinic-proxy:18001
+      HEARTBEAT_SEC: 1
+      EDGE_DB_PATH: /data/clinic_edge.db
+      QUEUE_DB_PATH: /data/clinic_queue.db
+      ACAAS_LEDGER_BACKEND: redis
+      ACAAS_REDIS_URL: redis://redis:6379/0
+      PYTHONPATH: /app
+    volumes: [edge-data:/data]
+    networks: [edge-net]
+    depends_on:
+      - clinic-proxy
+      - sync-server
+    profiles: ["soak"]
+
+  # ── Site 3: Mobile Unit ─────────────────────────────────────────────────────
+  mobile-proxy:
+    image: ghcr.io/shopify/toxiproxy:2.9.0
+    command: -host=0.0.0.0
+    networks: [edge-net, cloud-net]
+    profiles: ["soak"]
+
+  mobile-edge-pdp:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    command: python edge/lightweight-pdp/main.py
+    ports: ["8303:8303"]
+    environment:
+      EDGE_PDP_PORT: 8303
+      EDGE_DB_PATH: /data/mobile_edge.db
+      PYTHONPATH: /app
+    volumes: [edge-data:/data]
+    networks: [edge-net]
+    profiles: ["soak"]
+
+  mobile-data-minimizer:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    command: python edge/data-minimizer/main.py
+    ports: ["8304:8304"]
+    environment:
+      DATA_MINIMIZER_PORT: 8304
+      PYTHONPATH: /app
+    networks: [edge-net]
+    profiles: ["soak"]
+
+  mobile-pep:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    command: python edge/pep/main.py
+    ports: ["8305:8305"]
+    environment:
+      PEP_PORT: 8305
+      EDGE_PDP_URL: http://mobile-edge-pdp:8303
+      DATA_MINIMIZER_URL: http://mobile-data-minimizer:8304
+      CLOUD_PDP_URL: http://mobile-proxy:18002
+      QUEUE_DB_PATH: /data/mobile_queue.db
+      EDGE_NODE_ID: site-mobile
+      PYTHONPATH: /app
+    volumes: [edge-data:/data]
+    networks: [edge-net]
+    depends_on:
+      - mobile-edge-pdp
+      - mobile-data-minimizer
+      - mobile-proxy
+    profiles: ["soak"]
+
+  mobile-sync-client:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    command: python sync/client/sync_client.py
+    environment:
+      EDGE_NODE_ID: site-mobile
+      SYNC_SERVER_URL: http://mobile-proxy:18006
+      PMS_URL: http://mobile-proxy:18001
+      HEARTBEAT_SEC: 1
+      EDGE_DB_PATH: /data/mobile_edge.db
+      QUEUE_DB_PATH: /data/mobile_queue.db
+      ACAAS_LEDGER_BACKEND: redis
+      ACAAS_REDIS_URL: redis://redis:6379/0
+      PYTHONPATH: /app
+    volumes: [edge-data:/data]
+    networks: [edge-net]
+    depends_on:
+      - mobile-proxy
+      - sync-server
+    profiles: ["soak"]
+

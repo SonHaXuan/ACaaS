@@ -1,22 +1,20 @@
 """
 ACaaS Edge Lightweight PDP — REST endpoint.
 Responds to PEP queries in <10ms from local policy store.
-Falls back to cloud PDP when policy is missing or version is stale.
+Pure local decision point: no external WAN communication.
 """
 from __future__ import annotations
 
-import sys, os, time, uuid
+import sys, os, time, uuid, json
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../local-policy-store"))
+sys.path.insert(0, os.path.dirname(__file__))
 
 from fastapi import FastAPI
 from pydantic import BaseModel
 from typing import Optional
 from evaluator import evaluate
 import store
-import urllib.request, json
-
-CLOUD_PDP_URL = os.environ.get("CLOUD_PDP_URL", "http://localhost:8002")
 
 app = FastAPI(title="ACaaS Edge Lightweight PDP", version="1.0.0")
 
@@ -33,32 +31,23 @@ class EvalRequest(BaseModel):
     location: Optional[str] = None
 
 
-def _cloud_fallback(req: EvalRequest) -> dict | None:
-    try:
-        payload = json.dumps(req.dict()).encode()
-        r = urllib.request.Request(
-            f"{CLOUD_PDP_URL}/evaluate",
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urllib.request.urlopen(r, timeout=3) as resp:
-            return json.loads(resp.read())
-    except Exception:
-        return None
+EvalRequest.model_rebuild()
+
 
 
 @app.post("/evaluate")
 def evaluate_request(req: EvalRequest):
     req_id = req.request_id or str(uuid.uuid4())[:8]
     decision, policy_id, reason, latency_ms = evaluate(req.dict())
+    cache_hit = (policy_id is not None)
 
-    # If no local policy matched, fallback to cloud PDP
-    if decision == "DENY" and policy_id is None:
-        cloud_result = _cloud_fallback(req)
-        if cloud_result:
-            cloud_result["evaluated_by"] = "cloud-pdp-fallback"
-            return cloud_result
+    version = 0
+    policy_hash = ""
+    if policy_id:
+        p_row = store.get(policy_id)
+        if p_row:
+            version = p_row.get("version", 0)
+            policy_hash = p_row.get("hash", "")
 
     return {
         "request_id": req_id,
@@ -66,6 +55,9 @@ def evaluate_request(req: EvalRequest):
         "patient_id": req.patient_id,
         "decision": decision,
         "policy_id": policy_id,
+        "policy_version": version,
+        "policy_hash": policy_hash,
+        "cache_hit": cache_hit,
         "reason": reason,
         "evaluated_by": "edge-pdp",
         "latency_ms": round(latency_ms, 3),
@@ -91,5 +83,7 @@ def startup():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0",
-                port=int(os.environ.get("EDGE_PDP_PORT", 8003)), reload=True)
+    port = int(os.environ.get("EDGE_PDP_PORT", 8003))
+    log_level = os.environ.get("UVICORN_LOG_LEVEL", "warning")
+    uvicorn.run(app, host="0.0.0.0", port=port, log_level=log_level)
+

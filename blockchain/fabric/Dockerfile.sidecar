@@ -1,0 +1,8 @@
+FROM alpine:3.19
+WORKDIR /
+COPY blockchain/fabric/sidecar/fabric-sidecar /fabric-sidecar
+RUN chmod +x /fabric-sidecar
+EXPOSE 7050
+ENV PORT=7050
+HEALTHCHECK --interval=5s --timeout=3s --retries=3 CMD wget -q -O - http://localhost:7050/health || exit 1
+ENTRYPOINT ["/fabric-sidecar"]

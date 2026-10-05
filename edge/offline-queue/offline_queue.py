@@ -33,16 +33,23 @@ def _init() -> None:
 _init()
 
 
-def enqueue(entry: dict) -> int:
-    """Append a log entry; returns its sequence number."""
-    payload = json.dumps(entry, sort_keys=True)
-    digest = hashlib.sha256(payload.encode()).hexdigest()
+def enqueue(entry: dict, edge_id: str | None = None) -> int:
+    """Append a log entry with monotonic sequence number seq_e."""
+    edge = edge_id or entry.get("edge_id") or os.environ.get("EDGE_NODE_ID", "edge-node-1")
+    entry["edge_id"] = edge
     with _lock, _conn() as c:
         cur = c.execute(
             "INSERT INTO log_queue (entry_json, entry_hash, enqueued_at) VALUES (?,?,?)",
-            (payload, digest, time.time())
+            ("{}", "", time.time())
         )
         seq = cur.lastrowid
+        entry["seq_e"] = seq
+        payload = json.dumps(entry, sort_keys=True)
+        digest = hashlib.sha256(payload.encode()).hexdigest()
+        c.execute(
+            "UPDATE log_queue SET entry_json=?, entry_hash=? WHERE seq=?",
+            (payload, digest, seq)
+        )
         c.commit()
     return seq
 
@@ -83,9 +90,16 @@ def drain_to_logchain(fabric_mock=None) -> int:
     entries = pending()
     count = 0
     for item in entries:
-        fabric_mock.append_log({**item["entry"], "queue_seq": item["seq"]})
-        mark_uploaded(item["seq"])
-        count += 1
+        log_payload = dict(item["entry"])
+        if "seq_e" not in log_payload:
+            log_payload["seq_e"] = item["seq"]
+        log_payload["queue_seq"] = item["seq"]
+        try:
+            fabric_mock.append_log(log_payload)
+            mark_uploaded(item["seq"])
+            count += 1
+        except Exception:
+            break
     return count
 
 

@@ -71,3 +71,66 @@ def check_k_anonymity(records: list[dict],
     counts = Counter(keys)
     min_size = min(counts.values()) if counts else 0
     return min_size >= k, min_size
+
+def mondrian_partition(partition: list[dict], k: int, qi_fields: list[str]) -> list[list[dict]]:
+    """Recursively partition data using Mondrian multidimensional generalization."""
+    if len(partition) < 2 * k:
+        return [partition]
+        
+    for dim in qi_fields:
+        values = [str(r.get(dim, "")) for r in partition]
+        unique_vals = list(set(values))
+        if len(unique_vals) > 1:
+            values.sort()
+            median_val = values[len(values)//2]
+            
+            lhs = [r for r in partition if str(r.get(dim, "")) <= median_val]
+            rhs = [r for r in partition if str(r.get(dim, "")) > median_val]
+            
+            if len(lhs) >= k and len(rhs) >= k:
+                return mondrian_partition(lhs, k, qi_fields) + mondrian_partition(rhs, k, qi_fields)
+                
+    return [partition]
+
+def enforce_k_anonymity(
+    records: list[dict],
+    qi_fields: list[str] | None = None,
+    k: int = DEFAULT_K,
+) -> tuple[list[dict], int]:
+    """
+    Enforce k-anonymity on a cohort of EHR records using Multi-dimensional generalization (Mondrian):
+    1. Base 1D Generalizes quasi-identifiers.
+    2. Groups into equivalence classes using Mondrian.
+    3. For each partition, generalizations are applied so they are truly identical QI vectors.
+    4. Suppresses partitions of size < k.
+
+    Returns:
+        (sanitized_records, suppressed_count)
+    """
+    fields = qi_fields or ["date_of_birth", "postal_code", "ethnicity", "gender"]
+    generalized_base = [generalize_record(r) for r in records]
+
+    partitions = mondrian_partition(generalized_base, k, fields)
+    
+    sanitized: list[dict] = []
+    suppressed = 0
+    
+    for part in partitions:
+        if len(part) >= k:
+            # Apply group generalization to ensure identical QIs
+            group_gen = {}
+            for dim in fields:
+                unique_vals = sorted(list(set(str(r.get(dim, "")) for r in part)))
+                if len(unique_vals) > 1:
+                    group_gen[dim] = f"{unique_vals[0]}~{unique_vals[-1]}"
+                else:
+                    group_gen[dim] = unique_vals[0] if unique_vals else ""
+            
+            for r in part:
+                for dim in fields:
+                    r[dim] = group_gen[dim]
+                sanitized.append(r)
+        else:
+            suppressed += len(part)
+
+    return sanitized, suppressed

@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.venv/
+acaas.egg-info/
+data/
+results/
+.pytest_cache/

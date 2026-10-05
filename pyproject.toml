@@ -25,6 +25,10 @@ pythonpath = [
   ".",
   "shared",
 ]
+markers = [
+  "security: 21 security assertions running on Docker Compose stack",
+  "conformance: E6 33-test conformance test suite",
+]
 
 [tool.setuptools]
 include-package-data = true
