@@ -6,7 +6,7 @@ This repository contains the official runnable prototype and artifact evaluation
 
 ---
 
-## 🛠 Prerequisites
+## Prerequisites
 
 - **Host OS:** Linux (Ubuntu 22.04+ recommended) or Windows 10/11 with WSL2 (Ubuntu).
 - **Docker:** Docker Engine 24.0+ & Docker Compose v2.20+.
@@ -15,7 +15,7 @@ This repository contains the official runnable prototype and artifact evaluation
 
 ---
 
-## 🚀 1. Getting Started / Kick-the-Tires
+## 1. Getting Started / Kick-the-Tires
 
 ### Environment Setup
 
@@ -58,7 +58,7 @@ bash scripts/demo.sh
 
 ---
 
-## 🛡 2. Conformance Suite & Security Assertions (E6)
+## 2. Conformance Suite & Security Assertions (E6)
 
 The implementation maintains a strict **100% pass threshold** across 33 conformance tests and 21 security assertions running against the live Docker stack without service mocking.
 
@@ -74,7 +74,7 @@ You can also run them individually:
 
 ---
 
-## 📊 3. Experiment Reproduction (E1–E12)
+## 3. Experiment Reproduction (E1–E12)
 
 Each experiment is automated through a dedicated script in `experiments/` supporting `--quick` (rapid evaluation in seconds) and full-scale execution.
 
@@ -119,7 +119,7 @@ Plots will be saved as PDF and PNG files in the `results/figures/` directory.
 
 ---
 
-## 🧹 4. Teardown & Environment Cleanup
+## 4. Teardown & Environment Cleanup
 
 When finished, shut down the infrastructure properly:
 
