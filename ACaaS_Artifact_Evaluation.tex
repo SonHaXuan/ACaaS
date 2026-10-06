@@ -1,5 +1,9 @@
-\documentclass[sigconf]{acmart}
+\documentclass[runningheads]{llncs}
 
+\usepackage[T1]{fontenc}
+\usepackage{newtxtext}
+\usepackage[varvw]{newtxmath}
+\usepackage{graphicx}
 \usepackage{booktabs}
 \usepackage{tabularx}
 \usepackage{hyperref}
@@ -22,14 +26,17 @@
 \begin{document}
 \sloppy
 
-\title{Artifact Evaluation Appendix: ACaaS}
-\subtitle{Privacy-Preserving Access Control as a Service on the Cloud-Edge Continuum for Healthcare}
+\title{Artifact Evaluation Appendix: ACaaS\\\large Privacy-Preserving Access Control as a Service on the Cloud-Edge Continuum for Healthcare}
+
+
+\author{Artifact Evaluation Committee}
+\authorrunning{Artifact Evaluation Committee}
+\institute{ACaaS Project \email{artifact@acaas.org}}
+\maketitle
 
 \begin{abstract}
 This document provides complete instructions for Artifact Reviewers to set up, test, evaluate, and reproduce all experimental claims (E1--E12) reported in the paper. The artifact aims for the \textbf{Artifacts Available}, \textbf{Artifacts Evaluated -- Functional}, and \textbf{Results Reproduced} badges.
 \end{abstract}
-
-\maketitle
 
 \section{Structure of Artifact Evaluation}
 Following standard ACM/SIGPLAN Artifact Evaluation guidelines, evaluation proceeds in three stages:
@@ -134,29 +141,31 @@ This executes E1 through E12 sequentially, validates recorded metrics against ca
 
 \subsection{Detailed Breakdown of Individual Experiments}
 
-\begin{table*}[h]
+To generate all figures collectively without re-running the experiments, you can run \texttt{make figures}. The generated figures will be placed in the \texttt{results/figures/} directory.
+
+\begin{table}[h]
 \centering
 \caption{Experiment Reproduction Breakdown}
 \label{tab:experiments}
-\begin{tabular}{lllp{4cm}l}
+\begin{tabularx}{\textwidth}{@{}l X l X X@{}}
 \toprule
 \textbf{ID} & \textbf{Description} & \textbf{Command} & \textbf{Output Files} & \textbf{Paper Comparison Target} \\
 \midrule
-\textbf{E1} & Decision Latency (G4) & \texttt{make e1} & \texttt{raw.csv}, \texttt{summary.json} & Median latency $\approx 19$ ms ($< 50$ ms) \\
-\textbf{E2} & Throughput Scaling (G4/G2) & \texttt{make e2} & \texttt{raw.csv}, \texttt{summary.json} & Sustained req/s across worker levels \\
-\textbf{E3} & Batch Sync Latency (G1) & \texttt{make e3} & \texttt{raw.csv}, \texttt{summary.json} & Latency vs batch sizes (1..200) \\
-\textbf{E4} & Ledger Overhead (G2/G5) & \texttt{make e4} & \texttt{raw.csv}, \texttt{summary.json} & Fabric endorsement vs PostgreSQL baseline \\
-\textbf{E5} & Offline Resilience (G4) & \texttt{make e5} & \texttt{raw.csv}, \texttt{summary.json} & Cache evaluation \& zero drain loss \\
+\textbf{E1} & Decision Latency (G4) & \texttt{make e1} & \texttt{raw.csv}, \texttt{summary.json}, \newline \texttt{fig\_e01\_latency.pdf} & Median latency $\approx 19$ ms ($< 50$ ms) \\
+\textbf{E2} & Throughput Scaling (G4/G2) & \texttt{make e2} & \texttt{raw.csv}, \texttt{summary.json}, \newline \texttt{fig\_e02\_throughput.pdf} & Sustained req/s across worker levels \\
+\textbf{E3} & Batch Sync Latency (G1) & \texttt{make e3} & \texttt{raw.csv}, \texttt{summary.json}, \newline \texttt{fig\_e03\_sync.pdf} & Latency vs batch sizes (1..200) \\
+\textbf{E4} & Ledger Overhead (G2/G5) & \texttt{make e4} & \texttt{raw.csv}, \newline \texttt{summary.json} & Fabric endorsement vs PostgreSQL baseline \\
+\textbf{E5} & Offline Resilience (G4) & \texttt{make e5} & \texttt{raw.csv}, \newline \texttt{summary.json} & Cache evaluation \& zero drain loss \\
 \textbf{E6} & Conformance \& Security & \texttt{make e6} & \texttt{summary.json} & 100\% pass threshold (33+21 tests) \\
-\textbf{E7} & Hit-Rate Sensitivity (Prop. 1) & \texttt{make e7} & \texttt{raw.csv}, \texttt{summary.json} & Latency vs $\rho_{\mathrm{edge}}$ \\
-\textbf{E8} & Minimizer Pipeline Cost (G3) & \texttt{make e8} & \texttt{raw.csv}, \texttt{summary.json} & Stage latencies \& $k$-anonymity scaling \\
-\textbf{E9} & Re-identification Attack (Thm. 3) & \texttt{make e9} & \texttt{raw.csv}, \texttt{summary.json} & Empirical risk vs $1/k$ theoretical bound \\
-\textbf{E10} & Substrate Ablation (Lemma 1) & \texttt{make e10} & \texttt{raw.csv}, \texttt{summary.json} & Hash-anchor 100\% tamper vs PubSub 0\% \\
-\textbf{E11} & Byzantine Fault Ensemble ($f=1$) & \texttt{make e11} & \texttt{raw.csv}, \texttt{summary.json} & 100\% liveness \& 0 $\mathsf{INV}_{\mathrm{mono}}$ violations \\
-\textbf{E12} & Three-Site Soak Simulation & \texttt{make e12} & \texttt{table\_s\_soak.csv}, \texttt{tab\_s\_soak.tex} & 27{,}360 requests, 100\% avail, 0 loss \\
+\textbf{E7} & Hit-Rate Sensitivity (Prop. 1) & \texttt{make e7} & \texttt{raw.csv}, \texttt{summary.json}, \newline \texttt{fig\_e07\_hitrate.pdf} & Latency vs $\rho_{\mathrm{edge}}$ \\
+\textbf{E8} & Minimizer Pipeline Cost (G3) & \texttt{make e8} & \texttt{raw.csv}, \texttt{summary.json}, \newline \texttt{fig\_e08\_minimizer.pdf} & Stage latencies \& $k$-anonymity scaling \\
+\textbf{E9} & Re-identification Attack (Thm. 3) & \texttt{make e9} & \texttt{raw.csv}, \texttt{summary.json}, \newline \texttt{fig\_e09\_attack.pdf} & Empirical risk vs $1/k$ theoretical bound \\
+\textbf{E10} & Substrate Ablation (Lemma 1) & \texttt{make e10} & \texttt{raw.csv}, \newline \texttt{summary.json} & Hash-anchor 100\% tamper vs PubSub 0\% \\
+\textbf{E11} & Byzantine Fault Ensemble ($f=1$) & \texttt{make e11} & \texttt{raw.csv}, \newline \texttt{summary.json} & 100\% liveness \& 0 $\mathsf{INV}_{\mathrm{mono}}$ violations \\
+\textbf{E12} & Three-Site Soak Simulation & \texttt{make e12} & \texttt{table\_s\_soak.csv}, \newline \texttt{tab\_s\_soak.tex} & 27{,}360 requests, 100\% avail, 0 loss \\
 \bottomrule
-\end{tabular}
-\end{table*}
+\end{tabularx}
+\end{table}
 
 \section{Multi-Site Soak Simulation \& Table S-Soak (E12)}
 
@@ -171,7 +180,7 @@ Outputs generated in \texttt{results/E12/}:
     \item \texttt{tab\_s\_soak.tex}: LaTeX source for Table S-Soak matching \texttt{supplementary.tex}.
 \end{itemize}
 
-\begin{table*}[t]
+\begin{table}[t]
 \centering
 \caption{E12 three-site partition/soak emulation, 720 simulated minutes, 29 cloud-side policy updates (seed 20260704).}
 \label{tab:s-soak}
@@ -186,7 +195,7 @@ Mobile Unit         & 5{,}760  & 100\% & 2{,}104 & 648 & 21 & 384 & 3 \\
 \textbf{Aggregate}  & 27{,}360 & 100\% & 3{,}124 & 756 & 37 & 384 & 3 \\
 \bottomrule
 \end{tabular}
-\end{table*}
+\end{table}
 
 \textbf{Note for Artifact Reviewers (Important):}
 \begin{enumerate}

@@ -23,10 +23,10 @@ help:
 	@echo "  make clean            - Clean cache, temp files, and results"
 
 up:
-	docker compose up -d
+	docker compose -f docker-compose.yml -f docker-compose.experiments.yml up -d
 
 down:
-	docker compose down
+	docker compose -f docker-compose.yml -f docker-compose.experiments.yml down
 
 soak-up:
 	docker compose -f docker-compose.yml -f docker-compose.experiments.yml -f docker-compose.soak.yml --profile soak up -d

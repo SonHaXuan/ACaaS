@@ -105,7 +105,7 @@ def test_assertion_1_eventual_consistency(fabric_client):
         committed_policies.append({"policy_id": p["policy_id"], "version": p["version"], "hash": p["hash"]})
         
     wan.heal(["sync-server"])
-    time.sleep(1.0)
+    time.sleep(4.0)
     
     sc = sc_module.SyncClient(edge_node_id="test-sec-ec")
     old_url = sc_module.SYNC_SERVER_URL

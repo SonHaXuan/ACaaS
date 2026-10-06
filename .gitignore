@@ -5,3 +5,12 @@ acaas.egg-info/
 data/
 results/
 .pytest_cache/
+
+# Ignore markdown files except README
+*.md
+!README.md
+!README.md
+
+# Ignore supplementary files
+supplementary.pdf
+supplementary.tex

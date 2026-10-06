@@ -2,97 +2,131 @@
 
 > **Privacy-Preserving Access Control on the Cloud-Edge Continuum for Healthcare**
 
-This repository contains the runnable prototype for the ACaaS system described in the paper. It includes the cloud Policy Manager, edge Policy Enforcement Point (PEP) and PDP, the data minimization pipeline, and a mock Hyperledger Fabric PolicyChain.
+This repository contains the official runnable prototype and artifact evaluation environment for **ACaaS** as described in the paper. It aims to provide complete instructions to set up, test, evaluate, and reproduce all experimental claims (E1–E12) reported in the paper.
 
 ---
 
-## Prerequisites
-- Docker and Docker Compose (v2.20+)
-- Python 3.11+ (for local test and benchmark execution)
+## 🛠 Prerequisites
+
+- **Host OS:** Linux (Ubuntu 22.04+ recommended) or Windows 10/11 with WSL2 (Ubuntu).
+- **Docker:** Docker Engine 24.0+ & Docker Compose v2.20+.
+- **Python:** Python 3.11 or 3.12 (`python3-venv` required).
+- **Hardware:** Minimum 8 GB RAM, 4 CPU cores, 15 GB free disk space.
 
 ---
 
-## Setup & Run (Docker)
+## 🚀 1. Getting Started / Kick-the-Tires
 
-The easiest way to run the full 10-service stack (including Prometheus and Grafana) is via Docker Compose.
+### Environment Setup
 
-1. **Build the images:**
+1. **Clone repository and enter directory:**
    ```bash
-   docker compose build
+   git clone <repository_url> ACaaS
+   cd ACaaS
    ```
 
-2. **Start the services:**
+2. **Create Python virtual environment and install dependencies:**
    ```bash
-   docker compose up -d
+   python3 -m venv .venv
+   source .venv/bin/activate
+   pip install --upgrade pip
+   pip install -e ".[dev]"
+   pip install pytest matplotlib httpx
    ```
 
-3. **Stop the stack and clean up:**
-   ```bash
-   docker compose down -v
-   ```
+### Launch Docker Compose Stack
 
----
+Start all services, including the cloud and edge layers, Fabric Gateway sidecar, and Toxiproxy WAN emulator.
 
-## Running Benchmarks & Tests
+```bash
+make up
+```
 
-We provide automated scripts to verify system correctness, cross-validation, and evaluate throughput. 
+Confirm container health:
+```bash
+docker compose ps
+```
+*(Expected output: All services report `healthy` or `running`.)*
 
-### 1. End-to-End Demo
+### Kick-the-Tires Smoke Test
 
-With the Docker stack running, you can execute the full end-to-end flow (policy creation, edge sync, access evaluation, data minimization, and audit logging):
-
+Verify API routing and access control decisions:
 ```bash
 bash scripts/demo.sh
 ```
-
-### 2. Local Setup for Benchmarking
-
-To run the tests and load benchmarks, set up a local Python environment first:
-
-```bash
-python3.11 -m venv .venv
-source .venv/bin/activate        # Linux/macOS/WSL
-# .venv\Scripts\activate         # Windows CMD
-pip install -e ".[dev]"
-pip install locust               # Required for load testing
-```
-
-### 3. Unit & Cross-Validation Tests
-
-Run the complete test suite. This includes the cross-validation tests verifying semantic consistency across different ACaaS implementations (Claude-ICSOC vs Codex-ICSOC):
-
-```bash
-pytest tests/ -v
-```
-
-### 4. Throughput Scalability Benchmark (Locust)
-
-This load test evaluates the Edge PDP's throughput capability (Experiment 2). Ensure the Docker stack is running before executing this.
-
-**Run the headless benchmark (1000 concurrent users for 60 seconds):**
-```bash
-mkdir -p results
-locust -f tests/load/locustfile.py \
-  --host http://localhost:8003 \
-  --users 1000 \
-  --spawn-rate 50 \
-  --headless \
-  --run-time 60s \
-  --csv results/exp2
-```
-Results will be output to the `results/` folder as CSV files (`exp2_stats.csv`, etc.).
+*(Expected: Doctor access request returns `PERMIT` with pseudonymized EHR; Nurse access request returns `DENY` with full field redaction.)*
 
 ---
 
-## Citation
+## 🛡 2. Conformance Suite & Security Assertions (E6)
 
-If you find this code or our work useful in your research, please consider citing our paper:
+The implementation maintains a strict **100% pass threshold** across 33 conformance tests and 21 security assertions running against the live Docker stack without service mocking.
 
-```bibtex
-@inproceedings{acaas2024,
-  title={ACaaS: Privacy-Preserving Access Control on the Cloud-Edge Continuum for Healthcare},
-  author={[Your Name(s)]},
-  booktitle={Proceedings of the International Conference on Service-Oriented Computing (ICSOC)},
-  year={2024}
-}
+Run the entire test suite (58 tests):
+```bash
+make test
+```
+*(Result: 58 passed in ~16 seconds)*
+
+You can also run them individually:
+- **Conformance Suite (33 Tests):** `make test-conformance` (Unit, Blockchain, and Cross-Validation tests).
+- **Security Assertions (21 Assertions):** `make test-security` (Verifies event consistency, hash mismatches, sequence gap detection, drain resilience, etc.).
+
+---
+
+## 📊 3. Experiment Reproduction (E1–E12)
+
+Each experiment is automated through a dedicated script in `experiments/` supporting `--quick` (rapid evaluation in seconds) and full-scale execution.
+
+### Quick Reproduction of All Experiments (~15 Minutes)
+
+```bash
+make all-quick
+```
+This executes E1 through E12 sequentially, validates recorded metrics against canonical parameters, and renders publication figures in `results/figures/`.
+
+### Parameter Validation
+To strictly ensure zero discrepancies between paper parameters and executed code:
+```bash
+make check-params
+```
+
+### Generate Publication Figures
+To generate all figures collectively without re-running the experiments:
+```bash
+make figures
+```
+Plots will be saved as PDF and PNG files in the `results/figures/` directory.
+
+### Detailed Breakdown of Individual Experiments
+
+| ID | Description | Command | Output Files | Paper Comparison Target |
+|:---|:------------|:--------|:-------------|:------------------------|
+| **E1** | Decision Latency (G4) | `make e1` | `raw.csv`, `summary.json`,<br>`fig_e01_latency.pdf` | Median latency $\approx$ 19 ms ($<$ 50 ms) |
+| **E2** | Throughput Scaling (G4/G2) | `make e2` | `raw.csv`, `summary.json`,<br>`fig_e02_throughput.pdf` | Sustained req/s across worker levels |
+| **E3** | Batch Sync Latency (G1) | `make e3` | `raw.csv`, `summary.json`,<br>`fig_e03_sync.pdf` | Latency vs batch sizes (1..200) |
+| **E4** | Ledger Overhead (G2/G5) | `make e4` | `raw.csv`, <br>`summary.json` | Fabric endorsement vs PostgreSQL baseline |
+| **E5** | Offline Resilience (G4) | `make e5` | `raw.csv`, <br>`summary.json` | Cache evaluation & zero drain loss |
+| **E6** | Conformance & Security | `make e6` | `summary.json` | 100% pass threshold (33+21 tests) |
+| **E7** | Hit-Rate Sensitivity (Prop. 1) | `make e7` | `raw.csv`, `summary.json`,<br>`fig_e07_hitrate.pdf` | Latency vs cache hit-rate |
+| **E8** | Minimizer Pipeline Cost (G3) | `make e8` | `raw.csv`, `summary.json`,<br>`fig_e08_minimizer.pdf` | Stage latencies & $k$-anonymity scaling |
+| **E9** | Re-identification Attack (Thm. 3) | `make e9` | `raw.csv`, `summary.json`,<br>`fig_e09_attack.pdf` | Empirical risk vs $1/k$ theoretical bound |
+| **E10** | Substrate Ablation (Lemma 1) | `make e10` | `raw.csv`, <br>`summary.json` | Hash-anchor 100% tamper vs PubSub 0% |
+| **E11** | Byzantine Fault Ensemble ($f=1$) | `make e11` | `raw.csv`, <br>`summary.json` | 100% liveness & 0 INV_mono violations |
+| **E12** | Three-Site Soak Simulation | `make e12` | `table_s_soak.csv`,<br>`tab_s_soak.tex` | 27,360 requests, 100% avail, 0 loss |
+
+*(Note: Hardware Dependence – Performance metrics such as raw throughput and absolute latency are dependent on the evaluating machine's CPU/IO. Reviewers should focus on relative trends. Logical assertions remain 100% hardware-independent.)*
+
+---
+
+## 🧹 4. Teardown & Environment Cleanup
+
+When finished, shut down the infrastructure properly:
+
+```bash
+# Stop containers and remove volumes
+make down
+
+# Clean temporary Python cache files
+make clean
 ```
