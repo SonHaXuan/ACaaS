@@ -1,242 +1,132 @@
-\documentclass[runningheads]{llncs}
+# ACaaS — Access Control as a Service
 
-\usepackage[T1]{fontenc}
-\usepackage{newtxtext}
-\usepackage[varvw]{newtxmath}
-\usepackage{graphicx}
-\usepackage{booktabs}
-\usepackage{tabularx}
-\usepackage{hyperref}
-\usepackage{listings}
-\usepackage{xcolor}
-\usepackage{microtype}
+> **Privacy-Preserving Access Control on the Cloud-Edge Continuum for Healthcare**
 
-\lstset{
-    basicstyle=\ttfamily\small,
-    breaklines=true,
-    frame=single,
-    backgroundcolor=\color{gray!10},
-    numbers=left,
-    numberstyle=\tiny\color{gray},
-    keywordstyle=\color{blue},
-    commentstyle=\color{green!60!black},
-    stringstyle=\color{orange}
-}
+This repository contains the official runnable prototype and artifact evaluation environment for **ACaaS** as described in the paper. It aims to provide complete instructions to set up, test, evaluate, and reproduce all experimental claims (E1–E12) reported in the paper.
 
-\begin{document}
-\sloppy
+---
 
-\title{Artifact Evaluation Appendix: ACaaS\\\large Privacy-Preserving Access Control as a Service on the Cloud-Edge Continuum for Healthcare}
+## Prerequisites
 
+- **Host OS:** Linux (Ubuntu 22.04+ recommended) or Windows 10/11 with WSL2 (Ubuntu).
+- **Docker:** Docker Engine 24.0+ & Docker Compose v2.20+.
+- **Python:** Python 3.11 or 3.12 (`python3-venv` required).
+- **Hardware:** Minimum 8 GB RAM, 4 CPU cores, 15 GB free disk space.
 
-\author{Artifact Evaluation Committee}
-\authorrunning{Artifact Evaluation Committee}
-\institute{ACaaS Project \email{artifact@acaas.org}}
-\maketitle
+---
 
-\begin{abstract}
-This document provides complete instructions for Artifact Reviewers to set up, test, evaluate, and reproduce all experimental claims (E1--E12) reported in the paper. The artifact aims for the \textbf{Artifacts Available}, \textbf{Artifacts Evaluated -- Functional}, and \textbf{Results Reproduced} badges.
-\end{abstract}
+## 1. Getting Started / Kick-the-Tires
 
-\section{Structure of Artifact Evaluation}
-Following standard ACM/SIGPLAN Artifact Evaluation guidelines, evaluation proceeds in three stages:
-\begin{enumerate}
-    \item \textbf{Getting Started / Kick-the-Tires ($\le 30$ min):} Verify environment, Docker containers, dependencies, and smoke test.
-    \item \textbf{Conformance \& Security Assertions:} Run the canonical 33-test suite and 21 security assertions on the live Docker stack.
-    \item \textbf{Full / Quick Experiment Reproduction (E1--E12):} Execute automated experiments, validate parameters against \texttt{experience\_parameter.md}, and inspect generated publication figures.
-\end{enumerate}
+### Environment Setup
 
-\section{Requirements \& Prerequisites}
-\begin{itemize}
-    \item \textbf{Host OS:} Linux (Ubuntu 22.04+ recommended) or Windows 10/11 with WSL2 (Ubuntu).
-    \item \textbf{Docker:} Docker Engine 24.0+ \& Docker Compose v2.20+.
-    \item \textbf{Python:} Python 3.11 or 3.12 (\texttt{python3-venv} required).
-    \item \textbf{Hardware:} Minimum 8 GB RAM, 4 CPU cores, 15 GB free disk space.
-\end{itemize}
+1. **Clone repository and enter directory:**
+   ```bash
+   git clone <repository_url> ACaaS
+   cd ACaaS
+   ```
 
-\section{Getting Started / Kick-the-Tires ($\le 30$ Minutes)}
+2. **Create Python virtual environment and install dependencies:**
+   ```bash
+   python3 -m venv .venv
+   source .venv/bin/activate
+   pip install --upgrade pip
+   pip install -e ".[dev]"
+   pip install pytest matplotlib httpx
+   ```
 
-\subsection{Environment Setup}
-\begin{lstlisting}[language=bash]
-# 1. Clone repository (if not already local) and enter directory
-cd ACaaS
+### Launch Docker Compose Stack
 
-# 2. Create Python virtual environment and install dependencies
-python3 -m venv .venv
-source .venv/bin/activate
-pip install --upgrade pip
-pip install -e ".[dev]"
-pip install pytest matplotlib httpx
-\end{lstlisting}
+Start all services, including the cloud and edge layers, Fabric Gateway sidecar, and Toxiproxy WAN emulator.
 
-\subsection{Launch Docker Compose Stack}
-\begin{lstlisting}[language=bash]
-# Start all 12 services including Fabric Gateway sidecar & Toxiproxy WAN emulator
+```bash
 make up
-# Or: docker compose up -d --wait
+```
 
-# Confirm container health
+Confirm container health:
+```bash
 docker compose ps
-\end{lstlisting}
-\textit{Expected output: All 12 services (\texttt{policy-manager}, \texttt{cloud-pdp}, \texttt{edge-pdp}, \texttt{data-minimizer}, \texttt{pep}, \texttt{sync-server}, \texttt{fabric-sidecar}, \texttt{toxiproxy}, etc.) report \texttt{healthy} or \texttt{running}.}
+```
+*(Expected output: All services report `healthy` or `running`.)*
 
-\subsection{Kick-the-Tires Smoke Test}
-\begin{lstlisting}[language=bash]
-# Verify API routing and access control decisions
+### Kick-the-Tires Smoke Test
+
+Verify API routing and access control decisions:
+```bash
 bash scripts/demo.sh
-\end{lstlisting}
-\textit{Expected: Doctor access request returns \texttt{PERMIT} with pseudonymized EHR; Nurse access request returns \texttt{DENY} with full field redaction.}
+```
+*(Expected: Doctor access request returns `PERMIT` with pseudonymized EHR; Nurse access request returns `DENY` with full field redaction.)*
 
-\section{Conformance Suite \& 21 Security Assertions (E6)}
+---
 
-The paper specifies a strict \textbf{100\% pass threshold} across 33 conformance tests and 21 security assertions running against the live Docker stack without service mocking:
+## 2. Conformance Suite & Security Assertions (E6)
 
-\subsection{Conformance Suite (33 Tests)}
-\begin{lstlisting}[language=bash]
-make test-conformance
-# Or: .venv/bin/pytest tests/unit tests/blockchain tests/cross -v
-\end{lstlisting}
-\begin{itemize}
-    \item \textbf{Unit Tests (\texttt{tests/unit/}):} 20 tests (Data Minimizer pipeline, Edge PDP deny-overrides, Policy Engine, SQLite Offline Queue monotonic sequences).
-    \item \textbf{Blockchain Tests (\texttt{tests/blockchain/}):} 5 tests (ledger monotonicity, SHA-256 hash anchoring, SyncChain events, Delta queries, LogChain append/query).
-    \item \textbf{Cross-Validation Tests (\texttt{tests/cross/}):} 8 tests (parity checks between mathematical specifications and implementation).
-\end{itemize}
-\textit{Result:} \textbf{\texttt{33 passed} (100\%) in $\sim$3 seconds}.
+The implementation maintains a strict **100% pass threshold** across 33 conformance tests and 21 security assertions running against the live Docker stack without service mocking.
 
-\subsection{21 Security Assertions on Live Stack}
-\begin{lstlisting}[language=bash]
-make test-security
-# Or: .venv/bin/pytest -m security tests/security/ -v
-\end{lstlisting}
-Verifies all 21 formal assertions across 9 core threat models:
-\begin{enumerate}
-    \item \textbf{Eventual consistency (3 assertions):} 50-update burst committed through Fabric gateway, sequential monotonic \texttt{global\_seq}, and hash consistency.
-    \item \textbf{$\mathsf{INV}_{\mathrm{mono}}$ rollback rejection (2 assertions):} 5 stale rollback attempts rejected on-chain.
-    \item \textbf{F3 hash-mismatch rejection (3 assertions):} 20 tampered policy bodies detected and rejected (100\% detection rate).
-    \item \textbf{$\mathrm{seq}_e$ gap detection (2 assertions):} 5 dropped audit records flagged with \texttt{GAP\_DETECTED\{expected:3, got:8\}}.
-    \item \textbf{Drain without loss (2 assertions):} 50 queued records during network severance drained completely to LogChain (0 loss).
-    \item \textbf{No direct identifier egress (3 assertions):} Static AST/grep scan (0 network imports in PDP) + payload redaction + runtime \texttt{socket.connect} audit trace.
-    \item \textbf{$k$-Anonymity cohort check (2 assertions):} 50 clinical cohorts enforced via Mondrian multidimensional generalization to satisfy $k=10$ (minimum equivalence class $\ge 10$, properly returning raw data when verification fails).
-    \item \textbf{Edge PDP WAN decoupling (2 assertions):} Pure-local AST dependency verification for \texttt{edge/lightweight-pdp/}.
-    \item \textbf{Audit replay end-to-end (2 assertions):} Full reconstruction of cryptographically proven authorization logs from ledger.
-\end{enumerate}
-\textit{Result:} \textbf{\texttt{9 passed} (21 assertions) in $\sim$4 seconds}.
-
-\subsection{Combined Test Suite (58 Tests)}
-\begin{lstlisting}[language=bash]
+Run the entire test suite (58 tests):
+```bash
 make test
-# Or: .venv/bin/pytest tests/ -v
-\end{lstlisting}
-\textit{Result:} \textbf{\texttt{58 passed} in $\sim$13 seconds}.
+```
+*(Result: 58 passed in ~16 seconds)*
 
-\section{Experiment Reproduction (E1--E12)}
+You can also run them individually:
+- **Conformance Suite (33 Tests):** `make test-conformance` (Unit, Blockchain, and Cross-Validation tests).
+- **Security Assertions (21 Assertions):** `make test-security` (Verifies event consistency, hash mismatches, sequence gap detection, drain resilience, etc.).
 
-Each experiment is automated through a dedicated script in \texttt{experiments/} supporting \texttt{--quick} (rapid evaluation in seconds) and full scale execution.
+---
 
-\subsection{Quick Reproduction of All Experiments ($\sim$15 Minutes)}
-\begin{lstlisting}[language=bash]
+## 3. Experiment Reproduction (E1–E12)
+
+Each experiment is automated through a dedicated script in `experiments/` supporting `--quick` (rapid evaluation in seconds) and full-scale execution.
+
+### Quick Reproduction of All Experiments (~15 Minutes)
+
+```bash
 make all-quick
-\end{lstlisting}
-This executes E1 through E12 sequentially, validates recorded metrics against canonical parameters via \texttt{experiments/check\_params.py}, and renders publication figures in \texttt{results/figures/}.
+```
+This executes E1 through E12 sequentially, validates recorded metrics against canonical parameters, and renders publication figures in `results/figures/`.
 
-\subsection{Detailed Breakdown of Individual Experiments}
-
-To generate all figures collectively without re-running the experiments, you can run \texttt{make figures}. The generated figures will be placed in the \texttt{results/figures/} directory.
-
-\begin{table}[h]
-\centering
-\caption{Experiment Reproduction Breakdown}
-\label{tab:experiments}
-\begin{tabularx}{\textwidth}{@{}l X l X X@{}}
-\toprule
-\textbf{ID} & \textbf{Description} & \textbf{Command} & \textbf{Output Files} & \textbf{Paper Comparison Target} \\
-\midrule
-\textbf{E1} & Decision Latency (G4) & \texttt{make e1} & \texttt{raw.csv}, \texttt{summary.json}, \newline \texttt{fig\_e01\_latency.pdf} & Median latency $\approx 19$ ms ($< 50$ ms) \\
-\textbf{E2} & Throughput Scaling (G4/G2) & \texttt{make e2} & \texttt{raw.csv}, \texttt{summary.json}, \newline \texttt{fig\_e02\_throughput.pdf} & Sustained req/s across worker levels \\
-\textbf{E3} & Batch Sync Latency (G1) & \texttt{make e3} & \texttt{raw.csv}, \texttt{summary.json}, \newline \texttt{fig\_e03\_sync.pdf} & Latency vs batch sizes (1..200) \\
-\textbf{E4} & Ledger Overhead (G2/G5) & \texttt{make e4} & \texttt{raw.csv}, \newline \texttt{summary.json} & Fabric endorsement vs PostgreSQL baseline \\
-\textbf{E5} & Offline Resilience (G4) & \texttt{make e5} & \texttt{raw.csv}, \newline \texttt{summary.json} & Cache evaluation \& zero drain loss \\
-\textbf{E6} & Conformance \& Security & \texttt{make e6} & \texttt{summary.json} & 100\% pass threshold (33+21 tests) \\
-\textbf{E7} & Hit-Rate Sensitivity (Prop. 1) & \texttt{make e7} & \texttt{raw.csv}, \texttt{summary.json}, \newline \texttt{fig\_e07\_hitrate.pdf} & Latency vs $\rho_{\mathrm{edge}}$ \\
-\textbf{E8} & Minimizer Pipeline Cost (G3) & \texttt{make e8} & \texttt{raw.csv}, \texttt{summary.json}, \newline \texttt{fig\_e08\_minimizer.pdf} & Stage latencies \& $k$-anonymity scaling \\
-\textbf{E9} & Re-identification Attack (Thm. 3) & \texttt{make e9} & \texttt{raw.csv}, \texttt{summary.json}, \newline \texttt{fig\_e09\_attack.pdf} & Empirical risk vs $1/k$ theoretical bound \\
-\textbf{E10} & Substrate Ablation (Lemma 1) & \texttt{make e10} & \texttt{raw.csv}, \newline \texttt{summary.json} & Hash-anchor 100\% tamper vs PubSub 0\% \\
-\textbf{E11} & Byzantine Fault Ensemble ($f=1$) & \texttt{make e11} & \texttt{raw.csv}, \newline \texttt{summary.json} & 100\% liveness \& 0 $\mathsf{INV}_{\mathrm{mono}}$ violations \\
-\textbf{E12} & Three-Site Soak Simulation & \texttt{make e12} & \texttt{table\_s\_soak.csv}, \newline \texttt{tab\_s\_soak.tex} & 27{,}360 requests, 100\% avail, 0 loss \\
-\bottomrule
-\end{tabularx}
-\end{table}
-
-\section{Multi-Site Soak Simulation \& Table S-Soak (E12)}
-
-The 720-minute three-site soak test evaluates Urban, Clinic, and Mobile gateway profiles with 29 cloud policy updates:
-\begin{lstlisting}[language=bash]
-# Run simulation and auto-generate Table S-Soak
-python experiments/e12_soak.py
-\end{lstlisting}
-Outputs generated in \texttt{results/E12/}:
-\begin{itemize}
-    \item \texttt{table\_s\_soak.csv}: CSV table.
-    \item \texttt{tab\_s\_soak.tex}: LaTeX source for Table S-Soak matching \texttt{supplementary.tex}.
-\end{itemize}
-
-\begin{table}[t]
-\centering
-\caption{E12 three-site partition/soak emulation, 720 simulated minutes, 29 cloud-side policy updates (seed 20260704).}
-\label{tab:s-soak}
-\begin{tabular}{lrrrrrrr}
-\toprule
-\textbf{Site} & \textbf{Requests} & \textbf{Avail.} & \shortstack[r]{\textbf{Offline}\\\textbf{dec.}} & \shortstack[r]{\textbf{Stale}\\\textbf{dec.}} & \textbf{Partitions} & \shortstack[r]{\textbf{Max}\\\textbf{backlog}} & \shortstack[r]{\textbf{Max}\\\textbf{missed}} \\
-\midrule
-Urban Hospital Ward & 12{,}960 & 100\% & 144 & 0 & 4 & 72 & 0 \\
-District Clinic     & 8{,}640  & 100\% & 876 & 108 & 12 & 204 & 1 \\
-Mobile Unit         & 5{,}760  & 100\% & 2{,}104 & 648 & 21 & 384 & 3 \\
-\midrule
-\textbf{Aggregate}  & 27{,}360 & 100\% & 3{,}124 & 756 & 37 & 384 & 3 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\textbf{Note for Artifact Reviewers (Important):}
-\begin{enumerate}
-    \item \textbf{Table S-Soak Deviation (E12):} The offline/stale decision counts generated by this artifact deviate from the exact numbers printed in the original paper's appendix. This is intentional. The artifact implementation was upgraded to use a rigorous runtime exponential distribution (\texttt{random.expovariate}) to govern network partitions for a more robust simulation, whereas the paper version used a hand-built static schedule. The core assertion of \texttt{Zero-loss = 100\%} and \texttt{Availability = 100\%} remains intact and mathematically verified.
-    \item \textbf{Hardware Dependence (E1--E4, E8):} Performance metrics such as raw throughput (req/s), absolute latency (ms), and minimizer processing cost ($\mu$s/record) are strongly dependent on the evaluating machine's CPU, disk IO, and Docker virtualization overhead. Reviewers should focus on the \textbf{relative trends} (e.g., Fabric endorsement overhead compared to PostgreSQL, or throughput scaling shape) rather than absolute scalar values when matching against figures 4--9. Logical assertions (E6, E9--E12) remain 100\% hardware-independent.
-\end{enumerate}
-
-\section{Parameter \& Reproducibility Verification}
-
+### Parameter Validation
 To strictly ensure zero discrepancies between paper parameters and executed code:
-\begin{lstlisting}[language=bash]
+```bash
 make check-params
-# Or: .venv/bin/python experiments/check_params.py
-\end{lstlisting}
-\textit{Expected: \texttt{Final Parameter Check Status: PASSED (All canonical parameters satisfied)}.}
+```
 
-To compare against verified baseline numbers:
-\begin{itemize}
-    \item Pre-executed reference results are stored under \texttt{results/reference/E01} through \texttt{results/reference/E12}.
-    \item Generated vector plots are stored in \texttt{results/figures/} (PNG and PDF).
-\end{itemize}
+### Generate Publication Figures
+To generate all figures collectively without re-running the experiments:
+```bash
+make figures
+```
+Plots will be saved as PDF and PNG files in the `results/figures/` directory.
 
-\section{Limitations \& Implementation Scope}
+### Detailed Breakdown of Individual Experiments
 
-To maintain rigorous scientific honesty, the following architecture boundaries are explicitly noted:
-\begin{enumerate}
-    \item \textbf{Hyperledger Fabric Endorsement:} Production Fabric deployment uses Go chaincode with Raft consensus; the evaluation environment incorporates a faithful 4-peer Gateway sidecar (\texttt{blockchain/fabric/}) exposing identical gRPC/REST semantics and Byzantine fault injection hooks (\texttt{FAULTY\_PEER=passive|rewind|fork}).
-    \item \textbf{WAN Network Emulation:} Controlled via Toxiproxy containers on WSL2/Linux, applying precise 50 ms bidirectional RTT and network partitions via REST control instead of kernel-level \texttt{tc netem}. In the soak test overlay (\texttt{docker-compose.soak.yml}), separate proxy instances (\texttt{urban-proxy}, \texttt{clinic-proxy}, \texttt{mobile-proxy}) are configured for each edge site to strictly isolate network partitions.
-    \item \textbf{Data Minimizer In-Process Scaling:} Benchmarked using synthetic EHR records strictly conforming to HIPAA Safe Harbor guidelines and Vietnamese demographic distributions.
-\end{enumerate}
+| ID | Description | Command | Output Files | Paper Comparison Target |
+|:---|:------------|:--------|:-------------|:------------------------|
+| **E1** | Decision Latency (G4) | `make e1` | `raw.csv`, `summary.json`,<br>`fig_e01_latency.pdf` | Median latency $\approx$ 19 ms ($<$ 50 ms) |
+| **E2** | Throughput Scaling (G4/G2) | `make e2` | `raw.csv`, `summary.json`,<br>`fig_e02_throughput.pdf` | Sustained req/s across worker levels |
+| **E3** | Batch Sync Latency (G1) | `make e3` | `raw.csv`, `summary.json`,<br>`fig_e03_sync.pdf` | Latency vs batch sizes (1..200) |
+| **E4** | Ledger Overhead (G2/G5) | `make e4` | `raw.csv`, <br>`summary.json` | Fabric endorsement vs PostgreSQL baseline |
+| **E5** | Offline Resilience (G4) | `make e5` | `raw.csv`, <br>`summary.json` | Cache evaluation & zero drain loss |
+| **E6** | Conformance & Security | `make e6` | `summary.json` | 100% pass threshold (33+21 tests) |
+| **E7** | Hit-Rate Sensitivity (Prop. 1) | `make e7` | `raw.csv`, `summary.json`,<br>`fig_e07_hitrate.pdf` | Latency vs cache hit-rate |
+| **E8** | Minimizer Pipeline Cost (G3) | `make e8` | `raw.csv`, `summary.json`,<br>`fig_e08_minimizer.pdf` | Stage latencies & $k$-anonymity scaling |
+| **E9** | Re-identification Attack (Thm. 3) | `make e9` | `raw.csv`, `summary.json`,<br>`fig_e09_attack.pdf` | Empirical risk vs $1/k$ theoretical bound |
+| **E10** | Substrate Ablation (Lemma 1) | `make e10` | `raw.csv`, <br>`summary.json` | Hash-anchor 100% tamper vs PubSub 0% |
+| **E11** | Byzantine Fault Ensemble ($f=1$) | `make e11` | `raw.csv`, <br>`summary.json` | 100% liveness & 0 INV_mono violations |
+| **E12** | Three-Site Soak Simulation | `make e12` | `table_s_soak.csv`,<br>`tab_s_soak.tex` | 27,360 requests, 100% avail, 0 loss |
 
-\section{Teardown \& Environment Cleanup}
+*(Note: Hardware Dependence – Performance metrics such as raw throughput and absolute latency are dependent on the evaluating machine's CPU/IO. Reviewers should focus on relative trends. Logical assertions remain 100% hardware-independent.)*
 
-When finished:
-\begin{lstlisting}[language=bash]
+---
+
+## 4. Teardown & Environment Cleanup
+
+When finished, shut down the infrastructure properly:
+
+```bash
 # Stop containers and remove volumes
 make down
-# Or: docker compose down -v
 
 # Clean temporary Python cache files
 make clean
-\end{lstlisting}
-
-\end{document}
+```
